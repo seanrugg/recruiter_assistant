@@ -1,0 +1,27 @@
+# Optional. Recruiting Desk works without this file.
+#
+# Copy to %APPDATA%\RecruitingDesk\config.toml only if you are connecting a
+# GameChanger ACCOUNT for schedule and team data. Published athlete profiles are
+# read without an account or this file.
+#
+# Endpoint paths are deliberately left blank: GameChanger does not document its
+# API, and a guessed path returns "not found" -- which reads as "this player has
+# no stats" and quietly becomes a missing number in an email. Fill each line
+# only from a request you have seen your own browser make.
+
+[gamechanger]
+base_url = "https://api.team-manager.gc.com"
+
+[endpoints]
+login              = ""
+teams              = ""
+team_schedule      = ""   # {team_id}
+team_roster        = ""   # {team_id}
+player_stats       = ""   # {team_id} {player_id}
+game_box_score     = ""   # {game_id}
+game_play_by_play  = ""   # {game_id}
+player_video       = ""   # {team_id} {player_id}
+
+[contact_rules]
+verified_on = ""
+verified_by = ""

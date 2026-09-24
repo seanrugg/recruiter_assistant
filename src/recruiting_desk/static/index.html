@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Recruiting Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16212B; --ink-2:#44535F; --ink-3:#7C8A94;
+    --paper:#F6F7F5; --card:#FFFFFF; --line:#DEE2DB;
+    --optic:#C9DC3F; --optic-deep:#8A9B12;
+    --hold:#A83A2A; --live:#2E6B4F; --wait:#9A6B12;
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    color-scheme:light dark;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#ECF0EA; --ink-2:#AEBAB4; --ink-3:#7E8B86;
+      --paper:#10161A; --card:#182026; --line:#2A353C;
+      --optic:#C9DC3F; --optic-deep:#D9EC55;
+      --hold:#E0705C; --live:#63B58C; --wait:#D6A63F;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#ECF0EA; --ink-2:#AEBAB4; --ink-3:#7E8B86;
+    --paper:#10161A; --card:#182026; --line:#2A353C;
+    --hold:#E0705C; --live:#63B58C; --wait:#D6A63F;
+  }
+  *,*::before,*::after{box-sizing:inherit}
+  html{scroll-padding-top:env(safe-area-inset-top,0px)}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:Archivo,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:16px;line-height:1.5;-webkit-text-size-adjust:100%;font-variant-numeric:tabular-nums}
+  .wrap{max-width:880px;margin:0 auto;padding:0 16px 110px}
+  header.top{padding:18px 0 4px;display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  h1{font-size:21px;font-weight:700;letter-spacing:-0.02em;margin:0}
+  .who{font-size:13px;color:var(--ink-3)}
+  nav.tabs{display:flex;gap:2px;overflow-x:auto;margin:12px -16px 0;padding:0 16px 10px;scrollbar-width:none;
+    border-bottom:1px solid var(--line)}
+  nav.tabs::-webkit-scrollbar{display:none}
+  nav.tabs button{flex:0 0 auto;background:none;border:0;border-bottom:2px solid transparent;
+    color:var(--ink-3);font:inherit;font-size:14px;font-weight:600;padding:6px 10px;margin-bottom:-11px;cursor:pointer}
+  nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--optic-deep)}
+  nav.tabs button:focus-visible{outline:2px solid var(--optic-deep);outline-offset:2px}
+  section.view{display:none;padding-top:14px}
+  section.view.on{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin:12px 0}
+  .card h3{margin:0 0 4px;font-size:15px;font-weight:600}
+  .card .lede{font-size:13.5px;color:var(--ink-3);margin-bottom:10px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
+  .grow{flex:1 1 180px;min-width:0}
+  label{display:block;font-size:12px;color:var(--ink-3);margin:8px 0 3px;font-weight:500}
+  input,select,textarea{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--paper);
+    border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+  textarea{resize:vertical;min-height:80px;line-height:1.55}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--optic-deep);outline-offset:1px;border-color:transparent}
+  button.btn{font:inherit;font-size:14px;font-weight:600;border-radius:8px;padding:10px 15px;cursor:pointer;
+    background:var(--optic);color:#16212B;border:1px solid var(--optic-deep)}
+  button.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+  button.btn.quiet{background:transparent;color:var(--ink-3);border:0;padding:6px 8px;font-size:13px}
+  button.btn:disabled{opacity:.45;cursor:not-allowed}
+  button.btn:focus-visible{outline:2px solid var(--optic-deep);outline-offset:2px}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+    border-radius:999px;padding:2px 9px;border:1px solid var(--line);color:var(--ink-2)}
+  .pill.hold{color:var(--hold);border-color:var(--hold)}
+  .pill.live{color:var(--live);border-color:var(--live)}
+  .pill.wait{color:var(--wait);border-color:var(--wait)}
+  .muted{color:var(--ink-3);font-size:13px}
+  .empty{border:1px dashed var(--line);border-radius:10px;padding:24px 16px;text-align:center;color:var(--ink-3);font-size:14px}
+  .banner{border-left:3px solid var(--wait);background:color-mix(in srgb,var(--wait) 9%,transparent);
+    padding:11px 13px;border-radius:0 8px 8px 0;font-size:13.5px;margin:12px 0}
+  .banner.stop{border-left-color:var(--hold);background:color-mix(in srgb,var(--hold) 8%,transparent)}
+  .checklist{list-style:none;padding:0;margin:0}
+  .checklist li{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+  .checklist li:last-child{border-bottom:0}
+  .tick{flex:0 0 20px;height:20px;border-radius:50%;border:1.5px solid var(--line);margin-top:1px;
+    display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--card)}
+  .tick.done{background:var(--optic);border-color:var(--optic-deep);color:#16212B}
+  .kinds{display:grid;grid-template-columns:1fr;gap:10px}
+  @media(min-width:640px){.kinds{grid-template-columns:1fr 1fr}}
+  .kind{text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px;cursor:pointer;font:inherit;color:var(--ink)}
+  .kind[aria-pressed="true"]{border-color:var(--optic-deep);box-shadow:inset 0 0 0 1px var(--optic-deep)}
+  .kind b{display:block;font-size:15px;margin-bottom:3px}
+  .kind span{font-size:13px;color:var(--ink-3)}
+  .kind:disabled{opacity:.5;cursor:not-allowed}
+  .listrow{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin:8px 0}
+  .listrow .name{font-weight:600;font-size:15px}
+  .listrow .meta{font-size:12.5px;color:var(--ink-3);margin-top:2px}
+  .stat-line{display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line);padding:7px 0;font-size:14px}
+  .stat-line b{font-weight:600;min-width:72px}
+  .stat-line .src{color:var(--ink-3);font-size:12px;flex:1}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  .scroll-x{overflow-x:auto}
+  th{text-align:left;font-size:12px;color:var(--ink-3);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  .facts li{font-size:13px;color:var(--ink-2);margin-bottom:3px}
+  .draftbox{min-height:250px;font-size:15px;line-height:1.6}
+  .cred{max-width:380px}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Recruiting Desk</h1>
+    <div class="who"><span id="who"></span> <a href="/static/setup.html" style="margin-left:10px">Settings</a></div>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-view="home" aria-selected="true">Start here</button>
+    <button role="tab" data-view="player" aria-selected="false">Player</button>
+    <button role="tab" data-view="links" aria-selected="false">Profiles</button>
+    <button role="tab" data-view="coaches" aria-selected="false">Coaches</button>
+    <button role="tab" data-view="write" aria-selected="false">Write</button>
+    <button role="tab" data-view="sent" aria-selected="false">Sent</button>
+  </nav>
+  <section class="view on" id="view-home"></section>
+  <section class="view" id="view-player"></section>
+  <section class="view" id="view-links"></section>
+  <section class="view" id="view-coaches"></section>
+  <section class="view" id="view-write"></section>
+  <section class="view" id="view-sent"></section>
+</div>
+
+<script src="/static/bridge.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var S = {athletes:{}, targets:{}, rules:null, aid:null, tid:null, kind:"intro",
+           db:null, sample:null, downloads:null, draft:{subject:"",body:"",facts:[]}, busy:false};
+  var LS = "recruiting-desk-v2";
+
+  function uid(){ return (window.crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0,12) : "x"+Math.random().toString(36).slice(2,10); }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];}); }
+  function el(id){ return document.getElementById(id); }
+  function clone(o){ return JSON.parse(JSON.stringify(o||{})); }
+
+  function saveLocal(){ try{ localStorage.setItem(LS, JSON.stringify({athletes:S.athletes,targets:S.targets,rules:S.rules})); }catch(e){} }
+  function loadLocal(){ try{ var d=JSON.parse(localStorage.getItem(LS)||"null"); if(d){S.athletes=d.athletes||{};S.targets=d.targets||{};S.rules=d.rules||null;} }catch(e){} }
+
+  function putAthlete(r){ S.athletes[r.id]=r; if(S.db) S.db.doc("athletes/"+r.id).set(r).catch(fail); else saveLocal(); }
+  function putTarget(r){ S.targets[r.id]=r; if(S.db) S.db.doc("targets/"+r.id).set(r).catch(fail); else saveLocal(); }
+  function dropTarget(id){ delete S.targets[id]; if(S.db) S.db.doc("targets/"+id).delete().catch(fail); else saveLocal(); }
+  var failed=false;
+  function fail(){ if(failed) return; failed=true; var w=el("who"); if(w) w.textContent="Read-only — changes aren't saving"; }
+
+  /* ---------- contact windows ---------- */
+  function defaultRules(){
+    return {verifiedOn:"", verifiedBy:"", divisions:[
+      {key:"I",label:"NCAA Division I",monthDay:"09-01",yearsBeforeGrad:2,note:"Coaches may begin recruiting communication Sept 1 of junior year."},
+      {key:"II",label:"NCAA Division II",monthDay:"06-15",yearsBeforeGrad:2,note:"Coaches may begin recruiting communication June 15 after sophomore year."},
+      {key:"III",label:"NCAA Division III",monthDay:"",yearsBeforeGrad:0,note:"No date restriction."},
+      {key:"NAIA",label:"NAIA",monthDay:"",yearsBeforeGrad:0,note:"No date restriction."},
+      {key:"JUCO",label:"Junior college",monthDay:"",yearsBeforeGrad:0,note:"No date restriction."}]};
+  }
+  function ruleFor(d){ var r=S.rules||defaultRules(); for(var i=0;i<r.divisions.length;i++) if(r.divisions[i].key===d) return r.divisions[i]; return null; }
+  function gate(t){
+    var a=S.athletes[t.athleteId], rule=ruleFor(t.division);
+    if(!rule||!rule.monthDay) return {open:true,rule:rule};
+    var grad=a&&parseInt(a.gradYear,10);
+    if(!grad) return {open:false,unknown:true,rule:rule};
+    var d=new Date((grad-(rule.yearsBeforeGrad||0))+"-"+rule.monthDay+"T00:00:00");
+    return {open:new Date()>=d, date:d, rule:rule};
+  }
+  function fmt(d){ return d? d.toLocaleDateString(undefined,{month:"long",day:"numeric",year:"numeric"}) : ""; }
+
+  /* ---------- derived ---------- */
+  function athleteList(){ return Object.keys(S.athletes).map(function(k){return S.athletes[k];}).sort(function(a,b){return (a.name||"").localeCompare(b.name||"");}); }
+  function A(){ if(S.aid&&S.athletes[S.aid]) return S.athletes[S.aid]; var l=athleteList(); S.aid=l.length?l[0].id:null; return l[0]||null; }
+  function targetsFor(id){ return Object.keys(S.targets).map(function(k){return S.targets[k];}).filter(function(t){return t.athleteId===id;})
+      .sort(function(a,b){ return (a.school||"").localeCompare(b.school||""); }); }
+  function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+  function setup(a){
+    var t = targetsFor(a?a.id:"");
+    return [
+      {k:"connect", done:!!(a&&a.gcConnected), label:"Connect the GameChanger account", hint:"Pulls the schedule, box scores and video so nothing gets retyped."},
+      {k:"links",   done:!!(a&&(a.links||[]).length), label:"Add their profile links", hint:"FieldLevel, SportsRecruits, GameChanger, a highlight reel. Most of the player’s details come straight off these."},
+      {k:"basics",  done:!!(a&&a.name&&a.gradYear&&a.positions), label:"Fill in the player’s details", hint:"Name, sport, class year, positions."},
+      {k:"stats",   done:!!(a&&(a.stats||[]).length), label:"Add the stat line", hint:"Nothing can go in an email that isn't here first."},
+      {k:"voice",   done:!!(a&&(a.voice||"").trim().length>120), label:"Paste something the player wrote", hint:"A few paragraphs in their own words. This is what stops emails sounding like a parent."},
+      {k:"coaches", done:t.length>0, label:"Add coaches to write to", hint:t.length?(t.length+" on the list"):"Schools and the coach at each one."}
+    ];
+  }
+
+  /* ---------- views ---------- */
+  var VIEW="home";
+  function render(){
+    var a=A();
+    el("who").textContent = a ? (a.name||"Unnamed player") + " · " + (a.sport||"softball") + (athleteList().length>1?" · "+athleteList().length+" players":"") : "";
+    ({home:renderHome, player:renderPlayer, links:renderLinks, coaches:renderCoaches, write:renderWrite, sent:renderSent})[VIEW]();
+  }
+
+  function picker(){
+    var l=athleteList(); if(l.length<2) return "";
+    return '<div class="row" style="margin-bottom:6px"><div class="grow" style="max-width:250px"><label>Athlete</label><select id="apick">'+
+      l.map(function(a){return '<option value="'+esc(a.id)+'"'+(a.id===S.aid?' selected':'')+'>'+esc(a.name||"Unnamed")+'</option>';}).join("")+
+      '</select></div></div>';
+  }
+  function wirePicker(){ var p=el("apick"); if(p) p.onchange=function(){ S.aid=p.value; S.tid=null; render(); }; }
+
+  /* --- Start here --- */
+  function renderHome(){
+    var a=A(), host=el("view-home");
+    if(!a){
+      host.innerHTML='<div class="card"><h3>Set up a player</h3>'+
+        '<div class="lede">One player per campaign. You can add another later.</div>'+'<label>Sport</label><select id="newsport" style="max-width:220px"><option value="softball">Softball</option><option value="baseball">Baseball</option></select>'+
+        '<button class="btn" id="new">Start</button></div>';
+      el("new").onclick=function(){ newAthlete(el("newsport")?el("newsport").value:"softball"); };
+      return;
+    }
+    var steps=setup(a), left=steps.filter(function(s){return !s.done;});
+    host.innerHTML = picker()+ pasteCard(a) +
+      (a.gcConnected
+        ? '<div class="card"><h3>GameChanger</h3><div class="lede">Connected as '+esc(a.gcEmail||"the account")+
+          '. Schedule and stats refresh when you open the app.</div>'+
+          '<button class="btn ghost" id="disc">Disconnect</button></div>'
+        : '<div class="card"><h3>Connect GameChanger</h3>'+
+          '<div class="lede">Sign in the same way the player does. The app reads their teams, schedule, box scores and video — it never posts, changes or deletes anything.</div>'+
+          '<div class="cred"><label>Email</label><input id="gc-email" type="email" autocomplete="username" placeholder="parent@example.com">'+
+          '<label>Password</label><input id="gc-pass" type="password" autocomplete="current-password">'+
+          '<button class="btn" id="gc-go" style="margin-top:12px">Connect</button></div>'+
+          '<div class="banner stop" style="margin-top:14px"><b>Prototype.</b> This form does not connect to anything. '+
+          'GameChanger has no sign-in-with button, so a real version has to handle a real account password — which is only safe in an app installed on this computer, where the password never leaves it. '+
+          'Everything else here works; use “Enter by hand” below.</div>'+
+          '<button class="btn ghost" id="manual" style="margin-top:6px">Enter stats by hand instead</button></div>')+
+
+      '<div class="card"><h3>'+(left.length? "Before the first email goes out" : "Ready to write")+'</h3>'+
+        '<div class="lede">'+(left.length? (left.length+" thing"+(left.length>1?"s":"")+" left.") : "The record is complete. Pick a coach and an email on the Write tab.")+'</div>'+
+        '<ul class="checklist">'+steps.map(function(s){
+          return '<li><span class="tick'+(s.done?' done':'')+'">'+(s.done?'&#10003;':'')+'</span>'+
+            '<span><b style="font-weight:600">'+esc(s.label)+'</b><div class="muted">'+esc(s.hint)+'</div></span></li>';
+        }).join("")+'</ul></div>'+
+
+      '<div class="card"><h3>What this does</h3><div class="lede">Four kinds of email, all built from the player’s own numbers.</div>'+
+        '<ul class="checklist">'+
+        '<li><span><b style="font-weight:600">First email</b><div class="muted">Introduces the player to a coach who has never heard of them.</div></span></li>'+
+        '<li><span><b style="font-weight:600">Coming up</b><div class="muted">Tells a coach where to find them at the next tournament — field, time, jersey.</div></span></li>'+
+        '<li><span><b style="font-weight:600">Follow up</b><div class="muted">Nudges a coach who hasn\'t answered, with whatever has changed since.</div></span></li>'+
+        '<li><span><b style="font-weight:600">Thank you</b><div class="muted">For a coach who actually came and watched. The one most families skip and the one coaches remember.</div></span></li>'+
+        '</ul></div>'+
+      '<button class="btn quiet" id="new2">Add another athlete</button>';
+
+    wirePicker();
+    wirePaste(a, host);
+    if(el("gc-go")) el("gc-go").onclick=function(){
+      alert("Not wired up in the prototype. A shipped version would sign in here from the installed app, keep the password on this computer, and store only the session it gets back.");
+    };
+    if(el("manual")) el("manual").onclick=function(){ switchView("player"); };
+    if(el("disc")) el("disc").onclick=function(){ a.gcConnected=false; putAthlete(a); render(); };
+    el("new2").onclick=function(){ newAthlete((A()||{}).sport||"softball"); };
+  }
+  function newAthlete(sport){
+    var r={id:uid(),name:"",sport:sport||"softball",pronouns:"",gradYear:"",school:"",club:"",jersey:"",positions:"",gpa:"",tests:"",major:"",
+           email:"",phone:"",coachRef:"",voice:"",stats:[],events:[],links:[],socials:[],gcConnected:false,gcEmail:""};
+    putAthlete(r); S.aid=r.id; switchView("player");
+  }
+
+
+  /* ---------- pasted profile links ---------- */
+  var PLATFORMS=[
+    {id:"gamechanger",label:"GameChanger",kind:"profile",re:/(?:web\.)?gc\.com\/athlete\/([A-Za-z0-9_.\-]+)/i,
+     note:"GameChanger pages draw in the browser, so the link carries no stats. Connect the account in Settings for the real numbers."},
+    {id:"sportsrecruits",label:"SportsRecruits",kind:"profile",re:/sportsrecruits\.com\/athlete\/([A-Za-z0-9_.\-]+)/i},
+    {id:"fieldlevel",label:"FieldLevel",kind:"profile",re:/fieldlevel\.com\/(?:profile\/)?([A-Za-z0-9_.\-]+)/i},
+    {id:"hudl",label:"Hudl",kind:"profile",re:/hudl\.com\/profile\/(\d+)/i},
+    {id:"youtube",label:"YouTube",kind:"profile",re:/youtube\.com\/(@[A-Za-z0-9_.\-]+|channel\/[A-Za-z0-9_\-]+)/i},
+    {id:"instagram",label:"Instagram",kind:"social",re:/instagram\.com\/([A-Za-z0-9_.]+)/i,
+     note:"Instagram only shows profiles to a signed-in browser, so nothing can be read from the link."},
+    {id:"x",label:"X",kind:"social",re:/(?:twitter|x)\.com\/([A-Za-z0-9_]+)/i,
+     note:"X only shows profiles to a signed-in browser."},
+    {id:"facebook",label:"Facebook",kind:"social",re:/facebook\.com\/([A-Za-z0-9_.\-]+)/i,
+     note:"Facebook only shows profiles to a signed-in browser."},
+    {id:"tiktok",label:"TikTok",kind:"social",re:/tiktok\.com\/(@[A-Za-z0-9_.]+)/i,
+     note:"TikTok only shows profiles to a signed-in browser."}
+  ];
+  function identifyLink(url){
+    var u=(url||"").trim(); if(!u) return null;
+    for(var i=0;i<PLATFORMS.length;i++){
+      var m=u.match(PLATFORMS[i].re);
+      if(m) return {platform:PLATFORMS[i].id,label:PLATFORMS[i].label,kind:PLATFORMS[i].kind,
+                    handle:m[1],note:PLATFORMS[i].note||"",url:/^https?:/i.test(u)?u:"https://"+u};
+    }
+    return {platform:"other",label:"Profile",kind:"profile",handle:"",note:"",url:/^https?:/i.test(u)?u:"https://"+u};
+  }
+  var FIELD_LABELS={name:"Name",sport:"Sport",gradYear:"Class of",positions:"Positions",school:"High school",
+                  gpa:"GPA",height:"Height",weight:"Weight",hometown:"Hometown",bio:"Bio"};
+  var linkState={busy:false,msg:"",result:null};
+
+  function addLink(a,who){
+    if(who.kind==="social"){
+      a.socials=a.socials||[];
+      if(!a.socials.some(function(x){return (x.handle||"")===who.handle&&x.platform===who.label;}))
+        a.socials.push({platform:who.label,handle:who.handle||who.url,include:false});
+    } else {
+      a.links=a.links||[];
+      if(!a.links.some(function(x){return x.url===who.url;}))
+        a.links.push({label:who.label,url:who.url,include:true});
+      if(who.platform==="gamechanger") a.gcProfileUrl=who.url;
+    }
+    putAthlete(a);
+  }
+
+  function inspectLink(a, who){
+    linkState={busy:true,msg:"",result:null}; render();
+    fetch("/api/profile/inspect?url="+encodeURIComponent(who.url))
+      .then(function(res){ return res.ok? res.json() : Promise.reject(); })
+      .then(function(d){
+        linkState={busy:false,result:d,
+          msg:(d.label||who.label)+" saved. "+(d.message||who.note||"")};
+        render();
+      })
+      .catch(function(){
+        linkState={busy:false,result:null,
+          msg:who.label+" saved."+(who.note?" "+who.note:
+            " Reading the page for details only works in the installed app.")};
+        render();
+      });
+  }
+
+  function pasteCard(a){
+    var r=linkState.result;
+    var sugg = (r&&r.suggestions&&r.suggestions.length)
+      ? '<div style="margin-top:10px">'+r.suggestions.map(function(x,i){
+          return '<label class="stat-line" style="gap:10px"><input type="checkbox" data-sg="'+i+'" checked style="width:auto">'+
+            '<b>'+esc(FIELD_LABELS[x.field]||x.field)+'</b><span>'+esc(x.value)+'</span>'+
+            '<span class="src">from the '+esc(x.source)+'</span></label>';
+        }).join("")+'<button class="btn" id="applysg" style="margin-top:10px">Use the ticked ones</button></div>'
+      : "";
+    return '<div class="card"><h3>Paste a link</h3>'+
+      '<div class="lede">GameChanger, SportsRecruits, FieldLevel, Hudl, YouTube, Instagram, X, Facebook or TikTok. '+
+      'The link is filed in the right place, and where the site publishes anything about the player it is offered below to accept or ignore.</div>'+
+      '<div class="row"><div class="grow"><input id="pastelink" placeholder="https://..." autocomplete="off"></div>'+
+      '<button class="btn" id="pastego"'+(linkState.busy?' disabled':'')+'>'+(linkState.busy?"Reading\u2026":"Add")+'</button></div>'+
+      (linkState.msg? '<div class="banner" style="margin-top:10px">'+esc(linkState.msg)+'</div>':"")+
+      sugg+'</div>';
+  }
+
+  function wirePaste(a,host){
+    var go=el("pastego"); if(!go) return;
+    var input=el("pastelink");
+    input.onkeydown=function(e){ if(e.key==="Enter") go.click(); };
+    go.onclick=function(){
+      var url=input.value.trim(); if(!url) return;
+      var who=identifyLink(url);
+      addLink(a,who);
+      inspectLink(a,who);
+    };
+    var apply=el("applysg");
+    if(apply) apply.onclick=function(){
+      var r=linkState.result; if(!r) return;
+      Array.prototype.forEach.call(host.querySelectorAll("[data-sg]"),function(c){
+        if(!c.checked) return;
+        var x=r.suggestions[+c.getAttribute("data-sg")];
+        if(x && x.value) a[x.field]=x.value;
+      });
+      putAthlete(a); linkState={busy:false,msg:"Added to the record. Check each one.",result:null}; render();
+    };
+  }
+
+  /* --- Player --- */
+  function renderPlayer(){
+    var a=A(), host=el("view-player");
+    if(!a){ host.innerHTML='<div class="empty">Add an athlete on the first tab.</div>'; return; }
+    function f(k,l,ph){ return '<div class="grow"><label>'+esc(l)+'</label><input data-f="'+k+'" value="'+esc(a[k]||"")+'" placeholder="'+esc(ph||"")+'"></div>'; }
+    var stats=(a.stats||[]).map(function(s,i){
+      return '<div class="stat-line"><b>'+esc(s.label)+'</b><span>'+esc(s.value)+'</span><span class="src">'+esc(s.source||"no source")+'</span>'+
+             '<button class="btn quiet" data-ds="'+i+'">Remove</button></div>';}).join("")
+      || '<div class="muted">Nothing yet. An email can only use numbers that are on this list.</div>';
+    var evs=(a.events||[]).map(function(e,i){
+      return '<div class="stat-line"><b>'+esc(e.date)+'</b><span>'+esc(e.name)+'</span><span class="src">'+esc(e.location||"")+'</span>'+
+             '<button class="btn quiet" data-de="'+i+'">Remove</button></div>';}).join("")
+      || '<div class="muted">No tournaments on the calendar. A "coming up" email needs one.</div>';
+
+    host.innerHTML = picker()+
+      '<div class="card"><h3>Who they are</h3>'+
+        '<div class="row">'+f("name","Name")+f("gradYear","Class of","2029")+f("jersey","Jersey")+'</div>'+
+        '<div class="row"><div class="grow" style="max-width:160px"><label>Sport</label><select data-f="sport">'+
+          ["softball","baseball"].map(function(x){return '<option'+((a.sport||"softball")===x?' selected':'')+'>'+x+'</option>';}).join("")+
+        '</select></div><div class="grow" style="max-width:190px"><label>Pronouns</label><select data-f="pronouns">'+
+          ["","she/her","he/him","they/them"].map(function(x){return '<option value="'+x+'"'+((a.pronouns||"")===x?' selected':'')+'>'+(x||"not set")+'</option>';}).join("")+
+        '</select></div></div>'+
+        '<div class="row">'+f("positions","Positions","Pitcher / utility")+f("school","High school")+f("club","Club team")+'</div>'+
+        '<div class="row">'+f("height","Height","5\'10\"")+f("weight","Weight","155 lbs")+f("hometown","Hometown","Richmond, VA")+'</div>'+
+        '<div class="row">'+f("gpa","GPA")+f("tests","Test scores")+f("major","What they want to study")+'</div>'+
+        '<div class="row">'+f("email","Player email")+f("phone","Phone")+f("coachRef","Coach reference","Name, phone, email")+'</div></div>'+
+      '<div class="card"><h3>The numbers</h3>'+
+        '<div class="lede">Every one needs to say where it came from. A coach who checks a stat and finds it wrong stops reading, and that cannot be undone.</div>'+
+        stats+
+        '<div class="row" style="margin-top:10px">'+
+          '<div class="grow"><label>Stat</label><input id="s-l" placeholder="ERA"></div>'+
+          '<div class="grow"><label>Value</label><input id="s-v" placeholder="2.41"></div>'+
+          '<div class="grow"><label>From where</label><input id="s-s" placeholder="Fall 2026, 11 games"></div>'+
+        '</div><button class="btn" id="s-add" style="margin-top:8px">Add</button></div>'+
+      '<div class="card"><h3>Where they play next</h3><div class="lede">This is what makes "come watch me" a real invitation.</div>'+ evs +
+        '<div class="row" style="margin-top:10px">'+
+          '<div class="grow"><label>Date</label><input id="e-d" placeholder="Oct 18"></div>'+
+          '<div class="grow"><label>Tournament</label><input id="e-n" placeholder="Fall Showcase, Pool B"></div>'+
+          '<div class="grow"><label>Field and time</label><input id="e-l" placeholder="Fredericksburg, Field 4, 9:00am"></div>'+
+        '</div><button class="btn" id="e-add" style="margin-top:8px">Add</button></div>'+
+      '<div class="card"><h3>How they write</h3>'+
+        '<div class="lede">Paste a few paragraphs the player wrote — a school essay, a long message, anything nobody edited. Emails get matched to this. Without it they sound like an adult, which is the fastest way to get deleted.</div>'+
+        '<textarea data-f="voice" rows="7">'+esc(a.voice||"")+'</textarea></div>';
+
+    wirePicker();
+    wirePaste(a, host);
+    Array.prototype.forEach.call(host.querySelectorAll("[data-f]"),function(i){ i.onchange=function(){ a[i.getAttribute("data-f")]=i.value; putAthlete(a); }; });
+
+    el("s-add").onclick=function(){ var l=el("s-l").value.trim(),v=el("s-v").value.trim(); if(!l||!v)return;
+      a.stats=a.stats||[]; a.stats.push({label:l,value:v,source:el("s-s").value.trim()}); putAthlete(a); render(); };
+    el("e-add").onclick=function(){ var d=el("e-d").value.trim(),n=el("e-n").value.trim(); if(!d||!n)return;
+      a.events=a.events||[]; a.events.push({date:d,name:n,location:el("e-l").value.trim()}); putAthlete(a); render(); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-ds]"),function(b){ b.onclick=function(){ a.stats.splice(+b.getAttribute("data-ds"),1); putAthlete(a); render(); }; });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-de]"),function(b){ b.onclick=function(){ a.events.splice(+b.getAttribute("data-de"),1); putAthlete(a); render(); }; });
+  }
+
+  /* --- Profiles --- */
+  function renderLinks(){
+    var a=A(), host=el("view-links");
+    if(!a){ host.innerHTML='<div class="empty">Add an athlete first.</div>'; return; }
+    a.links=a.links||[]; a.socials=a.socials||[];
+    var links=a.links.map(function(l,i){
+      return '<div class="listrow"><div class="grow"><div class="name">'+esc(l.label||"Profile")+'</div>'+
+        '<div class="meta">'+esc(l.url)+'</div></div>'+
+        '<div style="display:flex;gap:6px;align-items:center">'+
+        '<label class="muted" style="margin:0"><input type="checkbox" data-luse="'+i+'"'+(l.include!==false?' checked':'')+' style="width:auto;margin-right:5px">In emails</label>'+
+        '<button class="btn quiet" data-ld="'+i+'">Remove</button></div></div>';
+    }).join("") || '<div class="muted">No profiles yet.</div>';
+    var socials=a.socials.map(function(s,i){
+      return '<div class="listrow"><div class="grow"><div class="name">'+esc(s.platform)+'</div><div class="meta">'+esc(s.handle)+'</div></div>'+
+        '<div style="display:flex;gap:6px;align-items:center">'+
+        '<label class="muted" style="margin:0"><input type="checkbox" data-suse="'+i+'"'+(s.include?' checked':'')+' style="width:auto;margin-right:5px">In emails</label>'+
+        '<button class="btn quiet" data-sd="'+i+'">Remove</button></div></div>';
+    }).join("") || '<div class="muted">None added.</div>';
+
+    host.innerHTML = picker()+ pasteCard(a) +
+      '<div class="card"><h3>Recruiting profiles</h3>'+
+        '<div class="lede">GameChanger, SportsRecruits, FieldLevel, a highlight reel — anywhere a coach can watch them play. Tick the ones that belong in emails.</div>'+
+        links+
+        '<div class="row" style="margin-top:10px">'+
+          '<div class="grow" style="max-width:190px"><label>What it is</label><input id="l-label" placeholder="GameChanger"></div>'+
+          '<div class="grow"><label>Link</label><input id="l-url" placeholder="https://web.gc.com/athlete/..."></div>'+
+        '</div><button class="btn" id="l-add" style="margin-top:8px">Add profile</button></div>'+
+      '<div class="card"><h3>Social accounts</h3>'+
+        '<div class="lede">Some coaches look, and an account kept for the sport is fair to include. A personal account they use with friends is not — leave those unticked, or off the list entirely.</div>'+
+        socials+
+        '<div class="row" style="margin-top:10px">'+
+          '<div class="grow" style="max-width:190px"><label>Platform</label><select id="s-plat">'+
+            ["Instagram","X","TikTok","YouTube","Facebook","Other"].map(function(p){return '<option>'+p+'</option>';}).join("")+'</select></div>'+
+          '<div class="grow"><label>Handle or link</label><input id="s-handle" placeholder="'+esc((a.name||"player").split(" ")[0].toLowerCase()+"."+(a.sport||"softball"))+'"></div>'+
+        '</div><button class="btn" id="s-addsoc" style="margin-top:8px">Add account</button>'+
+        '<div class="banner" style="margin-top:12px">Anything ticked here goes to grown adults the player has never met, alongside their name, school and where they will be playing. Worth deciding once, deliberately, rather than per email.</div>'+
+      '</div>';
+
+    wirePicker();
+    wirePaste(a, host);
+    el("l-add").onclick=function(){ var u=el("l-url").value.trim(); if(!u)return;
+      var who=identifyLink(u);
+      if(el("l-label").value.trim()) who.label=el("l-label").value.trim();
+      who.kind="profile"; addLink(a,who); inspectLink(a,who); };
+    el("s-addsoc").onclick=function(){ var h=el("s-handle").value.trim(); if(!h)return;
+      a.socials.push({platform:el("s-plat").value, handle:h, include:false}); putAthlete(a);
+      if(/^https?:/i.test(h)) inspectLink(a, identifyLink(h)); else render(); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-ld]"),function(b){ b.onclick=function(){ a.links.splice(+b.getAttribute("data-ld"),1); putAthlete(a); render(); }; });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-sd]"),function(b){ b.onclick=function(){ a.socials.splice(+b.getAttribute("data-sd"),1); putAthlete(a); render(); }; });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-luse]"),function(c){ c.onchange=function(){ a.links[+c.getAttribute("data-luse")].include=c.checked; putAthlete(a); }; });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-suse]"),function(c){ c.onchange=function(){ a.socials[+c.getAttribute("data-suse")].include=c.checked; putAthlete(a); }; });
+  }
+
+  /* --- Coaches --- */
+  function renderCoaches(){
+    var a=A(), host=el("view-coaches");
+    if(!a){ host.innerHTML='<div class="empty">Add an athlete first.</div>'; return; }
+    var list=targetsFor(a.id);
+    var rows=list.map(function(t){
+      var g=gate(t);
+      var pill=g.open?'<span class="pill live">Can write now</span>'
+        :(g.unknown?'<span class="pill wait">Needs a class year</span>'
+          :'<span class="pill hold">Coaches can\'t reply until '+esc(fmt(g.date))+'</span>');
+      var hist=(t.log||[]);
+      var last=hist.length?('<span class="pill">'+esc(hist[hist.length-1].kind)+' '+esc(hist[hist.length-1].date)+'</span>'):"";
+      var watched=t.watched?'<span class="pill live">Came to watch</span>':"";
+      return '<div class="listrow"><div class="grow"><div class="name">'+esc(t.school)+'</div>'+
+        '<div class="meta">'+esc(t.division)+' · '+esc(t.location||"")+' · '+esc(t.coachName||"no coach named")+'</div>'+
+        '<div class="meta">'+esc(t.coachEmail||"no email")+'</div>'+
+        (t.note?'<div class="meta" style="color:var(--wait)">'+esc(t.note)+'</div>':'')+
+        '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">'+pill+last+watched+'</div></div>'+
+        '<div style="display:flex;flex-direction:column;gap:6px">'+
+        '<button class="btn" data-w="'+esc(t.id)+'">Write</button>'+
+        '<button class="btn quiet" data-x="'+esc(t.id)+'">Remove</button></div></div>';
+    }).join("") || '<div class="empty">No coaches yet. Add the first one below.</div>';
+
+    host.innerHTML = picker()+ rows +
+      '<div class="card"><h3>Add a coach</h3><div class="row">'+
+        '<div class="grow"><label>School</label><input id="c-school"></div>'+
+        '<div class="grow" style="max-width:120px"><label>Division</label><select id="c-div">'+
+          ["I","II","III","NAIA","JUCO"].map(function(d){return '<option>'+d+'</option>';}).join("")+'</select></div>'+
+        '<div class="grow"><label>Where</label><input id="c-loc"></div></div>'+
+      '<div class="row"><div class="grow"><label>Coach</label><input id="c-name"></div>'+
+        '<div class="grow"><label>Email</label><input id="c-email" type="email"></div></div>'+
+      '<label>Why this school, in the player’s words</label><textarea id="c-fit" rows="2" placeholder="They graduate two pitchers in 2029 and it has the major they want."></textarea>'+
+      '<button class="btn" id="c-add" style="margin-top:8px">Add coach</button></div>';
+
+    wirePicker();
+    el("c-add").onclick=function(){ var s=el("c-school").value.trim(); if(!s)return;
+      putTarget({id:uid(),athleteId:a.id,school:s,division:el("c-div").value,location:el("c-loc").value.trim(),
+        coachName:el("c-name").value.trim(),coachEmail:el("c-email").value.trim(),fit:el("c-fit").value.trim(),
+        tier:"3",log:[],watched:false,note:""}); render(); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-w]"),function(b){ b.onclick=function(){ S.tid=b.getAttribute("data-w"); switchView("write"); }; });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-x]"),function(b){ b.onclick=function(){ dropTarget(b.getAttribute("data-x")); render(); }; });
+  }
+
+  /* --- Write --- */
+  var KINDS=[
+    {k:"intro",   t:"First email",  d:"An introduction to a coach who has never heard of them."},
+    {k:"coming",  t:"Coming up",    d:"Where to find them at the next tournament: field, time, jersey."},
+    {k:"follow",  t:"Follow up",    d:"A nudge for a coach who hasn't answered, with what's changed since."},
+    {k:"thanks",  t:"Thank you",    d:"For a coach who actually came and watched them play."}
+  ];
+
+  function renderWrite(){
+    var a=A(), host=el("view-write");
+    if(!a){ host.innerHTML='<div class="empty">Add an athlete first.</div>'; return; }
+    var list=targetsFor(a.id);
+    if(!list.length){ host.innerHTML=picker()+'<div class="empty">Add a coach first.</div>'; wirePicker(); return; }
+    if(!S.tid||!S.targets[S.tid]||S.targets[S.tid].athleteId!==a.id) S.tid=list[0].id;
+    var t=S.targets[S.tid], g=gate(t);
+    var hist=t.log||[];
+    var hasSent=hist.some(function(h){return h.action==="sent";});
+    var hasEvents=(a.events||[]).length>0;
+
+    function why(kind){
+      if(kind==="coming"&&!hasEvents) return "Needs a tournament on the calendar.";
+      if(kind==="follow"&&!hasSent) return "Nothing sent to this coach yet.";
+      if(kind==="thanks"&&!t.watched) return "Mark that this coach came to watch, below.";
+      return "";
+    }
+
+    host.innerHTML = picker()+
+      '<div class="row"><div class="grow"><label>Coach</label><select id="tpick">'+
+        list.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===t.id?' selected':'')+'>'+esc(x.school)+' — '+esc(x.coachName||"no coach")+'</option>';}).join("")+
+      '</select></div></div>'+
+      (!g.open? '<div class="banner stop"><b>'+(g.unknown?'Class year is missing.':'Held.')+'</b> '+
+        (g.unknown?'Add it on the Player tab and this will resolve.':
+          esc(g.rule.label)+' coaches may not reply to the class of '+esc(a.gradYear)+' until <b>'+esc(fmt(g.date))+'</b>. '+
+          'The player may write today; the coach cannot answer until then, and the email should say so rather than pretend otherwise.')+'</div>' : "")+
+      '<div class="card"><h3>What kind of email</h3>'+
+        '<div class="kinds">'+KINDS.map(function(K){
+          var block=why(K.k);
+          return '<button class="kind" data-k="'+K.k+'" aria-pressed="'+(S.kind===K.k)+'"'+(block?' disabled title="'+esc(block)+'"':'')+'>'+
+            '<b>'+esc(K.t)+'</b><span>'+esc(block||K.d)+'</span></button>';
+        }).join("")+'</div>'+
+        '<label style="margin-top:12px"><input type="checkbox" id="watched" '+(t.watched?'checked':'')+' style="width:auto;margin-right:8px">This coach came and watched them play</label>'+
+        '<div class="row" style="margin-top:12px"><button class="btn" id="gen">Write it</button>'+
+        '<span class="muted" id="state"></span></div>'+
+      '</div>'+
+      '<div class="card"><h3>The email</h3>'+
+        '<label>Subject</label><input id="d-subj" value="'+esc(S.draft.subject||"")+'">'+
+        '<label>Message</label><textarea id="d-body" class="draftbox" placeholder="Nothing written yet.">'+esc(S.draft.body||"")+'</textarea>'+
+        '<div class="row" style="margin-top:10px">'+
+          '<button class="btn" id="open">Open in email</button>'+
+          '<button class="btn ghost" id="copy">Copy</button>'+
+          '<button class="btn ghost" id="sent">Mark as sent</button>'+
+        '</div>'+
+        '<div class="muted" style="margin-top:8px">It opens in whatever email app the player is signed into, addressed and filled in. They read it, fix anything that does not sound like them, and press send.</div>'+
+      '</div>'+
+      (S.draft.facts&&S.draft.facts.length? '<div class="card"><h3>Check these before sending</h3><ul class="facts">'+
+        S.draft.facts.map(function(f){return '<li>'+esc(f)+'</li>';}).join("")+'</ul></div>':"");
+
+    wirePicker();
+    el("tpick").onchange=function(){ S.tid=el("tpick").value; S.draft={subject:"",body:"",facts:[]}; render(); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-k]"),function(b){ b.onclick=function(){ S.kind=b.getAttribute("data-k"); render(); }; });
+    el("watched").onchange=function(){ t.watched=el("watched").checked; putTarget(t); render(); };
+    el("gen").onclick=function(){ writeEmail(a,t); };
+    el("copy").onclick=function(){ if(navigator.clipboard) navigator.clipboard.writeText(el("d-body").value).then(function(){
+      el("copy").textContent="Copied"; setTimeout(function(){el("copy").textContent="Copy";},1400); }); };
+    el("open").onclick=function(){
+      window.location.href="mailto:"+encodeURIComponent(t.coachEmail||"")+"?subject="+encodeURIComponent(el("d-subj").value)+"&body="+encodeURIComponent(el("d-body").value);
+    };
+    el("sent").onclick=function(){
+      t.log=t.log||[]; t.log.push({kind:S.kind,action:"sent",date:todayISO(),subject:el("d-subj").value});
+      putTarget(t); S.draft={subject:"",body:"",facts:[]}; switchView("sent");
+    };
+    el("d-subj").oninput=function(){ S.draft.subject=el("d-subj").value; };
+    el("d-body").oninput=function(){ S.draft.body=el("d-body").value; };
+  }
+
+  function kindBrief(kind, a, t){
+    var hist=(t.log||[]).filter(function(h){return h.action==="sent";});
+    var lastSent=hist.length?hist[hist.length-1]:null;
+    if(kind==="intro") return "PURPOSE: first contact. The coach has never heard of this athlete. Say who they are and their class year, why this program specifically, two or three stats that matter for their position, where to watch them play on video, when and where they can be seen next, and one clear ask.";
+    if(kind==="coming") return "PURPOSE: the athlete is playing somewhere the coach could come and watch. Lead with the tournament, the field and the time, and the jersey number so they can be picked out of a roster. Keep the stats to one or two. The ask is that the coach comes, or says what they would want to see.";
+    if(kind==="follow") return "PURPOSE: a follow-up. The athlete wrote on "+(lastSent?lastSent.date:"an earlier date")+" and has had no answer. Do not repeat the first email. Lead with what has actually changed since — a new number from the stat line, a new tournament. Short. One ask. Do not sound aggrieved or apologetic about the silence.";
+    if(kind==="thanks") return "PURPOSE: the coach came and watched them play. Thank them specifically and briefly. Reference the event by name if it is on the calendar. Do not re-pitch the whole resume; one honest line about how it went is enough, including if it went badly. The ask is small or absent.";
+    return "";
+  }
+
+  function writeEmail(a,t){
+    var st=el("state");
+    if(!S.sample){ st.textContent="Writing isn't available in this view."; return; }
+    if(S.busy) return;
+    S.busy=true; el("gen").disabled=true; st.textContent="Writing…";
+    var g=gate(t);
+    var links=(a.links||[]).filter(function(l){return l.include!==false;}).map(function(l){return l.label+": "+l.url;}).join("\n")||"none";
+    var socials=(a.socials||[]).filter(function(s){return s.include;}).map(function(s){return s.platform+": "+s.handle;}).join("\n")||"none";
+    var stats=(a.stats||[]).map(function(s){return "- "+s.label+": "+s.value+" (source: "+(s.source||"unspecified")+")";}).join("\n")||"- none provided";
+    var events=(a.events||[]).map(function(e){return "- "+e.date+", "+e.name+(e.location?", "+e.location:"");}).join("\n")||"- none provided";
+
+    var pron=(a.pronouns||""), sport=(a.sport||"softball");
+    var prompt=[
+      "Write one recruiting email from a high school "+sport+" player to a college coach. The athlete reads it, edits it, and sends it personally.",
+      (pron? "The athlete"+String.fromCharCode(39)+"s pronouns are "+pron+". Use those and no others."
+         : "No pronouns are recorded. Use the athlete"+String.fromCharCode(39)+"s name and avoid pronouns entirely rather than assuming any."),
+      "", kindBrief(S.kind,a,t), "",
+      "HARD RULES:",
+      "1. Use only what is below. Invent nothing. No number that is not in THEIR STATS, and never rounded up or projected.",
+      "2. If something is missing, leave that subject out rather than filling it with something plausible.",
+      "3. The voice of the athlete, matched to the writing sample. A teenager wrote this.",
+      "4. Under 180 words. No bullet lists. No flattery. Never open with 'I am reaching out' or 'I hope this finds you well'.",
+      "5. Sign off with the athlete name and the contact details given, nothing more.",
+      g.open?"":"6. Coaches at this division may not reply to this graduating class until "+fmt(g.date)+". Acknowledge that in one short, unbothered sentence rather than writing as though it does not exist.",
+      "",
+      "THE ATHLETE","Name: "+(a.name||""),"Class of: "+(a.gradYear||""),"High school: "+(a.school||""),"Club: "+(a.club||""),
+      "Positions: "+(a.positions||""),"Jersey: "+(a.jersey||""),
+      "Height: "+(a.height||"")+"  Weight: "+(a.weight||""),"Hometown: "+(a.hometown||""),"GPA: "+(a.gpa||"")+"  Tests: "+(a.tests||""),
+      "Wants to study: "+(a.major||""),"Email: "+(a.email||"")+"  Phone: "+(a.phone||""),
+      "Coach reference: "+(a.coachRef||""),
+      "","WHERE COACHES CAN WATCH THEM PLAY",links,
+      "","SOCIAL ACCOUNTS THE ATHLETE CHOSE TO SHARE",socials,
+      "","THEIR STATS (the only numbers allowed)",stats,
+      "","THEIR SCHEDULE",events,
+      "","THE PROGRAM","School: "+t.school,"Division: "+t.division,"Location: "+(t.location||""),
+      "Coach: "+(t.coachName||""),"Why this school: "+(t.fit||"not given — write around it, do not invent a reason"),
+      "Came to watch them play: "+(t.watched?"yes":"no"),
+      "","EARLIER EMAILS TO THIS COACH",
+      ((t.log||[]).map(function(h){return "- "+h.date+": "+h.kind+" — "+(h.subject||"");}).join("\n")||"none"),
+      "","WRITING SAMPLE BY THE ATHLETE (match this)",(a.voice||"(none given — write plainly, short sentences, no adult polish)"),
+      "",
+      'Reply with only JSON: {"subject":"...","body":"...","facts":["every factual claim in the body, each naming where it came from"]}'
+    ].join("\n");
+
+    S.sample.json(prompt,{modelTier:"default"}).then(function(o){
+      S.draft={subject:String(o.subject||""),body:String(o.body||""),facts:Array.isArray(o.facts)?o.facts.map(String):[]};
+      t.log=t.log||[]; t.log.push({kind:S.kind,action:"drafted",date:todayISO(),subject:S.draft.subject});
+      putTarget(t); S.busy=false; render();
+    }).catch(function(e){
+      S.busy=false; el("gen").disabled=false;
+      st.textContent = e&&e.code==="not_granted" ? "Writing needs your permission — reload and allow it."
+        : e&&e.code==="rate_limited" ? "Too many at once. Wait a minute."
+        : e&&e.code==="invalid_json" ? "That came back garbled. Try again."
+        : "Something went wrong.";
+    });
+  }
+
+  /* --- Sent --- */
+  function renderSent(){
+    var a=A(), host=el("view-sent");
+    if(!a){ host.innerHTML='<div class="empty">Add an athlete first.</div>'; return; }
+    var list=targetsFor(a.id), rows=[], due=[];
+    var today=todayISO();
+    list.forEach(function(t){
+      (t.log||[]).filter(function(h){return h.action==="sent";}).forEach(function(h){
+        rows.push({school:t.school,coach:t.coachName,kind:h.kind,date:h.date,id:t.id});
+      });
+      var sent=(t.log||[]).filter(function(h){return h.action==="sent";});
+      if(sent.length&&!t.replied){
+        var lastD=sent[sent.length-1].date;
+        var d=new Date(lastD); d.setDate(d.getDate()+14);
+        if(d.toISOString().slice(0,10)<=today) due.push({school:t.school,id:t.id,since:lastD});
+      }
+    });
+    rows.sort(function(x,y){ return y.date.localeCompare(x.date); });
+
+    host.innerHTML = picker()+
+      (due.length? '<div class="card"><h3>Waiting on an answer</h3>'+
+        '<div class="lede">Two weeks or more with no reply. A short follow-up is normal, not a nuisance.</div>'+
+        due.map(function(d){ return '<div class="stat-line"><b>'+esc(d.school)+'</b><span class="src">last written '+esc(d.since)+'</span>'+
+          '<button class="btn quiet" data-fu="'+esc(d.id)+'">Follow up</button></div>'; }).join("")+'</div>' : "")+
+      '<div class="card"><h3>Everything sent</h3>'+
+        (rows.length? '<div class="scroll-x"><table><thead><tr><th>When</th><th>School</th><th>Coach</th><th>Kind</th></tr></thead><tbody>'+
+          rows.map(function(r){ return '<tr><td>'+esc(r.date)+'</td><td>'+esc(r.school)+'</td><td>'+esc(r.coach||"")+'</td><td>'+esc(r.kind)+'</td></tr>'; }).join("")+
+          '</tbody></table></div>' : '<div class="muted">Nothing yet.</div>')+
+        (rows.length?'<button class="btn ghost" id="exp" style="margin-top:10px">Download a copy</button>':"")+
+      '</div>';
+
+    wirePicker();
+    Array.prototype.forEach.call(host.querySelectorAll("[data-fu]"),function(b){
+      b.onclick=function(){ S.tid=b.getAttribute("data-fu"); S.kind="follow"; S.draft={subject:"",body:"",facts:[]}; switchView("write"); };
+    });
+    if(el("exp")) el("exp").onclick=function(){
+      var csv=["Date,School,Coach,Kind"].concat(rows.map(function(r){
+        return [r.date,r.school,r.coach||"",r.kind].map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(",");
+      })).join("\n");
+      if(S.downloads) S.downloads.save({filename:(a.name||"athlete").replace(/\s+/g,"-").toLowerCase()+"-emails.csv",data:csv}).catch(function(){});
+      else if(navigator.clipboard){ navigator.clipboard.writeText(csv); el("exp").textContent="Copied instead"; }
+    };
+  }
+
+  /* ---------- nav ---------- */
+  function switchView(v){
+    VIEW=v;
+    Array.prototype.forEach.call(document.querySelectorAll("nav.tabs button"),function(b){ b.setAttribute("aria-selected",String(b.getAttribute("data-view")===v)); });
+    Array.prototype.forEach.call(document.querySelectorAll("section.view"),function(s){
+      var on = s.id==="view-"+v;
+      s.classList.toggle("on", on);
+      if(!on) s.innerHTML="";   // otherwise three copies of the paste card share element ids
+    });
+    render(); window.scrollTo(0,0);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("nav.tabs button"),function(b){ b.onclick=function(){ switchView(b.getAttribute("data-view")); }; });
+
+  loadLocal();
+  render();
+
+  (async function(){
+    try{
+      var db=await claude.use("db");
+      if(db){
+        S.db=db;
+        db.collection("athletes").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); S.athletes=n; render(); },function(){});
+        db.collection("targets").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); S.targets=n; render(); },function(){});
+        db.doc("config/rules").onSnapshot(function(s){ S.rules = s.exists? clone(s.data()) : defaultRules(); render(); },function(){});
+      } else { if(!S.rules) S.rules=defaultRules(); render(); }
+    }catch(e){}
+  })();
+  (async function(){ try{ S.sample=await claude.use("sample"); render(); }catch(e){} })();
+  (async function(){ try{ S.downloads=await claude.use("downloads"); }catch(e){} })();
+})();
+</script>
+</body>
+</html>

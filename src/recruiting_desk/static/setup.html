@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Settings — Recruiting Desk</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#16212B;--ink-3:#7C8A94;--paper:#F6F7F5;--card:#FFF;--line:#DEE2DB;
+        --optic:#C9DC3F;--optic-deep:#8A9B12;--hold:#A83A2A;--live:#2E6B4F;--wait:#9A6B12;
+        box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);color-scheme:light dark}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ink:#ECF0EA;--ink-3:#7E8B86;--paper:#10161A;--card:#182026;--line:#2A353C;--optic-deep:#D9EC55;--hold:#E0705C;--live:#63B58C;--wait:#D6A63F}}
+  *,*::before,*::after{box-sizing:inherit}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:Archivo,-apple-system,sans-serif;line-height:1.5}
+  .wrap{max-width:660px;margin:0 auto;padding:22px 16px 80px}
+  h1{font-size:21px;margin:0 0 2px}
+  a{color:var(--ink)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin:14px 0}
+  .card h3{margin:0 0 4px;font-size:15px}
+  .lede{font-size:13.5px;color:var(--ink-3);margin-bottom:10px}
+  label{display:block;font-size:12px;color:var(--ink-3);margin:9px 0 3px;font-weight:500}
+  input,select{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--paper);
+    border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+  button{font:inherit;font-size:14px;font-weight:600;border-radius:8px;padding:10px 15px;cursor:pointer;
+    background:var(--optic);color:#16212B;border:1px solid var(--optic-deep)}
+  button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  .note{font-size:13px;margin-top:10px;padding:10px 12px;border-radius:0 8px 8px 0;border-left:3px solid var(--line)}
+  .note.good{border-left-color:var(--live);background:color-mix(in srgb,var(--live) 8%,transparent)}
+  .note.warn{border-left-color:var(--wait);background:color-mix(in srgb,var(--wait) 9%,transparent)}
+  .note.bad{border-left-color:var(--hold);background:color-mix(in srgb,var(--hold) 8%,transparent)}
+  .muted{color:var(--ink-3);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Settings</h1>
+  <div class="muted"><a href="/">Back to the desk</a></div>
+
+  <div class="card">
+    <h3>Which assistant writes the drafts</h3>
+    <div class="lede">Any of these works. The difference that matters is where her information goes.</div>
+    <label>Assistant</label>
+    <select id="prov"></select>
+    <div id="privacy" class="note"></div>
+    <label>Model</label>
+    <input id="model" placeholder="model name">
+    <div id="keywrap">
+      <label>API key</label>
+      <input id="key" type="password" placeholder="leave blank to keep the saved one" autocomplete="off">
+      <div class="muted" id="hint"></div>
+    </div>
+    <label>Address</label>
+    <input id="base" placeholder="https://...">
+    <div class="row"><button id="save">Save</button><button class="ghost" id="test">Test it</button>
+      <span class="muted" id="state"></span></div>
+    <div id="result"></div>
+  </div>
+
+  <div class="card">
+    <h3>Stop the app</h3>
+    <div class="lede">Recruiting Desk keeps running in the background after you close this tab, so the next visit is instant. This turns it off. Opening it again from the Start menu brings it back with everything saved.</div>
+    <button class="ghost" id="quit">Quit Recruiting Desk</button>
+    <span class="muted" id="quitmsg"></span>
+  </div>
+
+  <div class="card">
+    <h3>GameChanger</h3>
+    <div class="lede">Sign in the way she signs in. This runs on this computer: the password is used for the sign-in and nothing else, and only the session it returns is kept here.</div>
+    <div id="gcstate"></div>
+    <div id="gcform">
+      <label>Email</label><input id="gc-email" type="email" autocomplete="username">
+      <label>Password</label><input id="gc-pass" type="password" autocomplete="current-password">
+      <div class="row"><button id="gc-go">Connect</button><span class="muted" id="gc-msg"></span></div>
+    </div>
+    <div class="row"><button class="ghost" id="gc-out" hidden>Disconnect</button></div>
+  </div>
+</div>
+
+<script>
+var S = null;
+
+function el(id){ return document.getElementById(id); }
+
+function paint(){
+  var p = (S.providers||[]).filter(function(x){ return x.id === S.provider; })[0];
+  el("prov").innerHTML = (S.providers||[]).map(function(x){
+    return '<option value="'+x.id+'"'+(x.id===S.provider?' selected':'')+'>'+x.label+'</option>';
+  }).join("");
+  if (!S.provider && S.providers.length) el("prov").selectedIndex = 0;
+  p = p || S.providers[el("prov").selectedIndex];
+  el("model").value = S.model || p.default_model || "";
+  el("base").value = S.base_url || p.base_url || "";
+  el("hint").textContent = p.key_hint || "";
+  el("keywrap").hidden = !p.needs_key;
+  el("key").placeholder = S.has_key ? "saved — leave blank to keep it" : "";
+  el("privacy").className = "note " + (p.data_leaves_machine ? "warn" : "good");
+  el("privacy").innerHTML = p.data_leaves_machine
+    ? "Her name, school, stats and where she is playing next are sent to " + p.label +
+      " each time a draft is written. That is how every cloud assistant works; it is worth knowing about a sixteen-year-old rather than discovering later."
+    : "Nothing leaves this computer. Drafts are written by a model running here, so her information never reaches anyone else's servers.";
+
+  var gc = S.gamechanger || {};
+  el("gcstate").innerHTML = gc.connected
+    ? '<div class="note good">Connected. Schedule and stats can be pulled.</div>'
+    : (gc.endpoints_configured && gc.endpoints_configured.length
+        ? ''
+        : '<div class="note bad">Sign-in is not set up in this build, so the app cannot reach GameChanger yet. Everything else works — her numbers get entered by hand on Her info.</div>');
+  el("gcform").hidden = !!gc.connected;
+  el("gc-out").hidden = !gc.connected;
+}
+
+function load(){
+  fetch("/api/settings").then(function(r){ return r.json(); }).then(function(d){ S = d; paint(); });
+}
+load();
+
+el("prov").onchange = function(){
+  var p = S.providers[el("prov").selectedIndex];
+  S.provider = p.id; S.model = p.default_model; S.base_url = p.base_url; S.has_key = false;
+  paint();
+};
+
+el("save").onclick = function(){
+  var body = {provider: el("prov").value, model: el("model").value.trim(), base_url: el("base").value.trim()};
+  if (el("key").value) body.api_key = el("key").value;
+  el("state").textContent = "Saving…";
+  fetch("/api/settings", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body)})
+    .then(function(r){ return r.json(); })
+    .then(function(d){ el("key").value=""; el("state").textContent="Saved."; load(); });
+};
+
+el("test").onclick = function(){
+  el("state").textContent = "Asking…"; el("result").innerHTML = "";
+  fetch("/api/llm/test", {method:"POST"}).then(function(r){ return r.json().then(function(d){ return {s:r.status,d:d}; }); })
+    .then(function(x){
+      el("state").textContent = "";
+      el("result").innerHTML = x.d.ok
+        ? '<div class="note good">It answered. Ready to write.</div>'
+        : '<div class="note bad">'+ (x.d.message||"No answer.") + (x.d.hint? " " + x.d.hint : "") + '</div>';
+    });
+};
+
+el("gc-go").onclick = function(){
+  el("gc-msg").textContent = "Signing in…";
+  fetch("/api/gc/login", {method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify({email: el("gc-email").value, password: el("gc-pass").value})})
+    .then(function(r){ return r.json().then(function(d){ return {s:r.status,d:d}; }); })
+    .then(function(x){
+      el("gc-pass").value = "";
+      el("gc-msg").textContent = x.d.ok ? "" : (x.d.message || "That did not work.") + (x.d.hint ? " " + x.d.hint : "");
+      load();
+    });
+};
+
+el("quit").onclick = function(){
+  fetch("/api/app/quit", {method:"POST"}).finally(function(){
+    el("quitmsg").textContent = " Stopped. You can close this tab.";
+  });
+};
+
+el("gc-out").onclick = function(){
+  fetch("/api/gc/disconnect", {method:"POST"}).then(load);
+};
+</script>
+</body>
+</html>
