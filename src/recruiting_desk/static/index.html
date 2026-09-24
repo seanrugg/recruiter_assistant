@@ -589,21 +589,30 @@
       var line=function(c,i){
         var dup=c.email && have[c.email.toLowerCase()];
         return '<label class="stat-line" style="gap:10px;align-items:flex-start">'+
-          '<input type="checkbox" data-ck="'+i+'"'+(CS.ticks[i]?' checked':'')+(dup?' disabled':'')+' style="width:auto;margin-top:4px">'+
+          '<input type="checkbox" data-ck="'+i+'"'+(CS.ticks[i]&&!dup?' checked':'')+(dup?' disabled':'')+' style="width:auto;margin-top:4px">'+
           '<span style="flex:1"><b style="font-weight:600">'+esc(c.name||"(no name)")+'</b> <span class="muted">'+esc(c.title||"")+'</span>'+
+          (c.from_directory?' <span class="pill" style="margin-left:4px">from the staff directory</span>':'')+
           '<div class="muted">'+(c.email?esc(c.email):'<span style="color:var(--wait)">No email published by the school \u2014 left blank, not guessed</span>')+
           (c.phone?' \u00b7 '+esc(c.phone):'')+(dup?' \u00b7 <b>already on the list</b>':'')+'</div></span></label>';
       };
-      var staff=CS.coaches.map(function(c,i){ return c.support_staff?"":line(c,i); }).join("");
-      var support=CS.coaches.map(function(c,i){ return c.support_staff?line(c,i):""; }).join("");
+      var coachRows=CS.coaches.map(function(c,i){ return c.is_coach?line(c,i):""; }).join("");
+      var otherRows=CS.coaches.map(function(c,i){ return c.is_coach?"":line(c,i); }).join("");
+      var picked=CS.ticks.filter(Boolean).length;
       h+='<div style="margin-top:14px"><div class="row" style="justify-content:space-between;align-items:baseline">'+
         '<h3 style="margin:0">'+esc(CS.school.name)+'</h3><button class="btn quiet" id="sch-back">\u2190 Back to results</button></div>'+
-        '<div class="muted">Division '+esc(CS.school.division||"?")+' \u00b7 read from <a href="'+esc(CS.sourceUrl)+'" target="_blank" rel="noopener">'+esc(CS.sourceUrl)+'</a></div>'+
+        '<div class="muted">'+(CS.school.division?'Division '+esc(CS.school.division)+' \u00b7 ':'')+'read from '+
+          (CS.sources||[CS.sourceUrl]).map(function(u){ return '<a href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(u.replace(/^https?:\/\/(www\.)?/,""))+'</a>'; }).join(" and ")+'</div>'+
         (CS.note?'<div class="banner" style="margin-top:8px">'+esc(CS.note)+'</div>':'')+
+        '<div class="row" style="gap:6px;margin-top:10px;align-items:center">'+
+          '<button class="btn ghost" id="ck-all" style="padding:6px 10px">Select all</button>'+
+          '<button class="btn ghost" id="ck-none" style="padding:6px 10px">Select none</button>'+
+          '<button class="btn ghost" id="ck-coaches" style="padding:6px 10px">Coaches only</button>'+
+          '<span class="muted" id="ck-count">'+picked+' selected</span></div>'+
         '<div style="margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:0 10px">'+
-        (staff||'<div class="muted" style="padding:10px 0">No coaching staff listed.</div>')+
-        (support?'<div class="muted" style="padding:10px 0 2px;font-weight:600">Support staff \u2014 trainers, operations, communications. Rarely who to write to.</div>'+support:'')+
-        '</div><button class="btn" id="ck-add" style="margin-top:10px">Add ticked coaches</button></div>';
+        (coachRows?'<div class="muted" style="padding:10px 0 2px;font-weight:600">Coaches</div>'+coachRows
+                  :'<div class="muted" style="padding:10px 0">No one here has a coaching title. Check the list below against the school\u2019s page.</div>')+
+        (otherRows?'<div class="muted" style="padding:12px 0 2px;font-weight:600">Other staff \u2014 managers, trainers, operations. Rarely who to write to.</div>'+otherRows:'')+
+        '</div><button class="btn" id="ck-add" style="margin-top:10px">Add selected coaches</button></div>';
     }
     return h;
   }
@@ -697,9 +706,18 @@
         b.onclick=function(){ showCoaches(a, CS.schools[+b.getAttribute("data-sch")]); };
       });
       if(el("sch-back")) el("sch-back").onclick=function(){ CS.coaches=null; CS.msg=""; render(); };
+      var recount=function(){ var n=el("ck-count"); if(n) n.textContent=CS.ticks.filter(Boolean).length+" selected"; };
       Array.prototype.forEach.call(host.querySelectorAll("[data-ck]"),function(c){
-        c.onchange=function(){ CS.ticks[+c.getAttribute("data-ck")]=c.checked; };
+        c.onchange=function(){ CS.ticks[+c.getAttribute("data-ck")]=c.checked; recount(); };
       });
+      var setAll=function(pick){
+        var have=existingEmails(a);
+        CS.ticks=CS.coaches.map(function(c){ return pick(c) && !(c.email && have[c.email.toLowerCase()]); });
+        render();
+      };
+      if(el("ck-all")) el("ck-all").onclick=function(){ setAll(function(){ return true; }); };
+      if(el("ck-none")) el("ck-none").onclick=function(){ setAll(function(){ return false; }); };
+      if(el("ck-coaches")) el("ck-coaches").onclick=function(){ setAll(function(c){ return c.is_coach && !!c.email; }); };
       if(el("ck-add")) el("ck-add").onclick=function(){
         var n=0, have=existingEmails(a);
         CS.coaches.forEach(function(c,i){
@@ -708,7 +726,7 @@
           putTarget({id:uid(),athleteId:a.id,school:CS.school.name,division:CS.school.division||"",
             location:[CS.school.city,CS.school.state].filter(Boolean).join(", "),
             coachName:c.name,title:c.title||"",coachEmail:c.email||"",fit:"",tier:"3",log:[],watched:false,
-            note:c.email?"From the school\u2019s staff page \u2014 confirm on "+c.source_url+" before writing."
+            note:c.email?"From the school\u2019s "+(c.from_directory?"staff directory":"coaches page")+" \u2014 confirm on "+c.source_url+" before writing."
                         :"No email published by the school. Find it before writing."});
           n++;
         });
@@ -773,8 +791,8 @@
       .then(function(d){
         CS.busy=false;
         if(!d.ok){ CS.msg=(d.error&&d.error.message||"Couldn\u2019t read that site.")+(d.error&&d.error.hint?" "+d.error.hint:""); CS.coaches=null; render(); return; }
-        CS.coaches=d.coaches; CS.sourceUrl=d.source_url; CS.note=d.note; CS.msg="";
-        CS.ticks=d.coaches.map(function(c){ return !c.support_staff && !!c.email; });
+        CS.coaches=d.coaches; CS.sourceUrl=d.source_url; CS.sources=d.sources; CS.note=d.note; CS.msg="";
+        CS.ticks=d.coaches.map(function(c){ return !!c.is_coach && !!c.email; });
         render();
       })
       .catch(function(){ CS.busy=false; CS.msg="Reading a school\u2019s site only works in the installed app."; render(); });
