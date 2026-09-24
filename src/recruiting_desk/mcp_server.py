@@ -170,7 +170,8 @@ def athlete_save(athlete_id: str, fields: dict) -> dict:
     Useful fields: sport ("softball" or "baseball"), pronouns ("she/her", "he/him",
     "they/them"), name, grad_year, high_school, club_team, positions, jersey,
     gpa, test_scores, academic_interest, gc_profile_url, recruiting_profile_url,
-    email, phone, coach_reference, writing_sample, gc_team_id, gc_player_id,
+    email, phone, ncaaId (NCAA Eligibility Center ID), refName, refEmail,
+    refPhone (the reference coach), writing_sample, gc_team_id, gc_player_id,
     delivery.
 
     delivery is how finished emails reach coaches, and the assistant's mail
@@ -353,6 +354,9 @@ def draft_brief(athlete_id: str, program_id: str) -> dict:
             "stats that matter for their position, the video link, when and where they can next be seen, one clear ask.",
             "DELIVERY is set on the athlete record and repeated below. Follow it exactly.",
             "List back every factual claim you made and where each one came from, so the athlete can check them.",
+            "End with a signature block: name, class year, email, phone; the NCAA Eligibility Center ID if the "
+            "record has one (ncaaId); and a reference line with the reference coach's name, email and phone "
+            "(refName, refEmail, refPhone) if present. Older records may hold the reference as one line in coachRef.",
         ],
         "if_window_closed": ("The athlete may still write; the coach may not answer until the date above. Say so plainly "
                              "rather than drafting as though the date does not exist."),

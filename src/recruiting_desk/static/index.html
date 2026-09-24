@@ -256,7 +256,7 @@
   }
   function newAthlete(sport){
     var r={id:uid(),name:"",sport:sport||"softball",pronouns:"",gradYear:"",school:"",club:"",jersey:"",positions:"",gpa:"",tests:"",major:"",
-           email:"",phone:"",coachRef:"",voice:"",stats:[],events:[],links:[],socials:[]};
+           email:"",phone:"",ncaaId:"",refName:"",refEmail:"",refPhone:"",voice:"",stats:[],events:[],links:[],socials:[]};
     putAthlete(r); S.aid=r.id; switchView("player");
   }
 
@@ -453,9 +453,26 @@
     };
   }
 
+  /* Records saved before the reference coach was split into three fields kept it
+     as one line, e.g. "Pat Coach, (555) 111-2222, pat@club.org". Pull the email
+     and phone out by pattern; what remains is the name. Runs once per record. */
+  function migrateReference(a){
+    if(!a || !a.coachRef || a.refName || a.refEmail || a.refPhone) return false;
+    var t=String(a.coachRef);
+    var em=t.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    var ph=t.match(/\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]\d{4}/);
+    if(em) t=t.replace(em[0],"");
+    if(ph) t=t.replace(ph[0],"");
+    a.refEmail=em?em[0]:""; a.refPhone=ph?ph[0]:"";
+    a.refName=t.replace(/[,;|]+/g," ").replace(/\s+/g," ").trim();
+    delete a.coachRef;
+    return true;
+  }
+
   /* --- Player --- */
   function renderPlayer(){
     var a=A(), host=el("view-player");
+    if(migrateReference(a)) putAthlete(a);
     if(!a){ host.innerHTML='<div class="empty">Add an athlete on the first tab.</div>'; return; }
     function f(k,l,ph){ return '<div class="grow"><label>'+esc(l)+'</label><input data-f="'+k+'" value="'+esc(a[k]||"")+'" placeholder="'+esc(ph||"")+'"></div>'; }
     var stats=(a.stats||[]).map(function(s,i){
@@ -478,7 +495,12 @@
         '<div class="row">'+f("positions","Positions","Pitcher / utility")+f("school","High school")+f("club","Club team")+'</div>'+
         '<div class="row">'+f("height","Height","5\'10\"")+f("weight","Weight","155 lbs")+f("hometown","Hometown","Richmond, VA")+'</div>'+
         '<div class="row">'+f("gpa","GPA")+f("tests","Test scores")+f("major","What they want to study")+'</div>'+
-        '<div class="row">'+f("email","Player email")+f("phone","Phone")+f("coachRef","Coach reference","Name, phone, email")+'</div></div>'+
+        '<div class="row">'+f("ncaaId","NCAA Eligibility Center ID","10 digits")+f("email","Player email")+f("phone","Phone")+'</div>'+
+        (a.ncaaId && !/^\d{10}$/.test(String(a.ncaaId).replace(/\s/g,""))
+          ? '<div class="muted" style="color:var(--wait);margin-top:4px">NCAA Eligibility Center IDs are 10 digits. Check it against the player\u2019s account at eligibilitycenter.org \u2014 a coach will look it up.</div>' : '')+
+        '<div style="margin-top:14px;font-weight:600;font-size:14px">Reference coach</div>'+
+        '<div class="muted">A coach who knows the player\u2019s game \u2014 usually the travel or high school coach. Goes at the bottom of emails so a college coach can call them.</div>'+
+        '<div class="row">'+f("refName","Name","First and last name")+f("refEmail","Email")+f("refPhone","Phone")+'</div></div>'+
       '<div class="card"><h3>The numbers</h3>'+
         '<div class="lede">Every one needs to say where it came from. A coach who checks a stat and finds it wrong stops reading, and that cannot be undone.</div>'+
         stats+
@@ -905,14 +927,15 @@
       "2. If something is missing, leave that subject out rather than filling it with something plausible.",
       "3. The voice of the athlete, matched to the writing sample. A teenager wrote this.",
       "4. Under 180 words. No bullet lists. No flattery. Never open with 'I am reaching out' or 'I hope this finds you well'.",
-      "5. Sign off with the athlete name and the contact details given, nothing more.",
+      "5. End with a signature block: the athlete's name, class year, email and phone; then \"NCAA Eligibility Center ID:\" and the number, if one is given; then a reference line for the reference coach with their name, email and phone, if given. Nothing else in the signature.",
       g.open?"":"6. Coaches at this division may not reply to this graduating class until "+fmt(g.date)+". Acknowledge that in one short, unbothered sentence rather than writing as though it does not exist.",
       "",
       "THE ATHLETE","Name: "+(a.name||""),"Class of: "+(a.gradYear||""),"High school: "+(a.school||""),"Club: "+(a.club||""),
       "Positions: "+(a.positions||""),"Jersey: "+(a.jersey||""),
       "Height: "+(a.height||"")+"  Weight: "+(a.weight||""),"Hometown: "+(a.hometown||""),"GPA: "+(a.gpa||"")+"  Tests: "+(a.tests||""),
       "Wants to study: "+(a.major||""),"Email: "+(a.email||"")+"  Phone: "+(a.phone||""),
-      "Coach reference: "+(a.coachRef||""),
+      "NCAA Eligibility Center ID: "+(a.ncaaId||""),
+      "Reference coach: "+[a.refName,a.refEmail,a.refPhone].filter(Boolean).join(", "),
       "","WHERE COACHES CAN WATCH THEM PLAY",links,
       "","SOCIAL ACCOUNTS THE ATHLETE CHOSE TO SHARE",socials,
       "","THEIR STATS (the only numbers allowed)",stats,
