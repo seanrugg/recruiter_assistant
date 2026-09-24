@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Build output
+build/
+dist/
+*.spec.bak
+
+# Never commit a family's data. The app keeps it in the user's profile folder,
+# but these catch anything copied into the repo by mistake.
+athletes.json
+programs.json
+outreach.json
+contact_rules*.json
+settings.json
+token
+config.toml
+*.csv
+
+# OS
+.DS_Store
+Thumbs.db
