@@ -270,6 +270,13 @@ def inspect(url):
         result["published"] = payload.get("publish_status") == "published"
         result["has_premium_access"] = payload.get("has_premium_access")
         result["avatar_url"] = payload.get("avatar_url", "")
+        result["seasons"], result["career"] = [], None
+        if result["published"] and payload.get("capability_token") and payload.get("id"):
+            raw, serr = gamechanger_career_stats(payload["id"], payload["capability_token"])
+            if raw:
+                result["seasons"], result["career"] = summarize_career_stats(raw)
+            elif serr:
+                result["stats_message"] = serr["message"]
         if not result["published"]:
             result["message"] = ("That profile is unpublished, so GameChanger serves nothing for it. "
                                  "Publishing it in the GameChanger app is what makes it readable -- "
@@ -357,3 +364,141 @@ def gamechanger_suggestions(payload):
     if payload.get("bio"):
         out.append(_suggest("bio", str(payload["bio"])[:400], src))
     return out
+
+
+# --------------------------------------------------------------------------
+# Career stats from the public profile
+#
+# The public profile call hands out a capability token scoped to that one
+# profile. Sent back in a gc-ctoken header with GameChanger's versioned Accept
+# type, it returns every season the athlete has played, per team, batting and
+# pitching. No account, no password.
+#
+# GameChanger's own page also sends an AWS bot-protection token. This works
+# without it today. If that ever changes, the call fails with 401/403 and the
+# app says so plainly and falls back to entering stats by hand -- never an
+# empty stat line that looks like "no stats".
+# --------------------------------------------------------------------------
+
+import secrets
+
+_DEVICE_ID = secrets.token_hex(16)
+CAREER_STATS_ACCEPT = "application/vnd.gc.com.athlete_profile_career_stats+json; version=0.0.0"
+
+SEASON_ORDER = {"winter": 0, "spring": 1, "summer": 2, "fall": 3, "autumn": 3}
+
+BATTING = [  # (GameChanger key, label, kind)
+    ("PA", "PA", "int"), ("AB", "AB", "int"), ("H", "H", "int"),
+    ("AVG", "AVG", "avg"), ("OBP", "OBP", "avg"), ("SLG", "SLG", "avg"), ("OPS", "OPS", "avg"),
+    ("HR", "HR", "int"), ("RBI", "RBI", "int"), ("BB", "BB", "int"), ("SO", "K", "int"),
+    ("SB", "SB", "int"),
+]
+PITCHING = [
+    ("IP", "IP", "ip"), ("ERA", "ERA", "era"), ("WHIP", "WHIP", "era"),
+    ("SO", "K", "int"), ("BB", "BB", "int"), ("BF", "BF", "int"),
+    ("S%", "Strike %", "pct"), ("FPS%", "First-pitch strike %", "pct"),
+]
+
+
+def fmt_stat(value, kind):
+    """Format the way a coach reads it: .409 not 0.4088, 12.1 innings not 12.333."""
+    if value is None:
+        return ""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if kind == "int":
+        return str(int(round(v)))
+    if kind == "avg":
+        s = f"{v:.3f}"
+        return s[1:] if s.startswith("0.") else s
+    if kind == "era":
+        return f"{v:.2f}"
+    if kind == "pct":
+        return f"{v * 100:.0f}%"
+    if kind == "ip":
+        whole = int(v)
+        outs = round((v - whole) * 3)
+        if outs >= 3:
+            whole, outs = whole + 1, 0
+        return f"{whole}.{outs}"
+    return str(value)
+
+
+def season_sort_key(name):
+    """'Summer 2026' -> (2026, 2). Unrecognised names sort last."""
+    parts = (name or "").lower().split()
+    year = next((int(p) for p in parts if p.isdigit() and len(p) == 4), 0)
+    part = next((SEASON_ORDER[p] for p in parts if p in SEASON_ORDER), -1)
+    return (year, part)
+
+
+def _block(stats, spec):
+    return [{"key": k, "label": label, "value": fmt_stat(stats.get(k), kind)}
+            for k, label, kind in spec if stats.get(k) is not None]
+
+
+def summarize_career_stats(payload):
+    """Shape the raw response into seasons a person can choose from.
+
+    Newest first. A season with no plate appearances and no innings is left
+    out -- it has nothing to say to a coach."""
+    seasons = []
+    for row in payload.get("player_stats_data") or []:
+        info = row.get("info") or {}
+        stats = row.get("stats") or {}
+        off = stats.get("offense") or {}
+        de = stats.get("defense") or {}
+        pa = float(off.get("PA") or 0)
+        ip = float(de.get("IP") or 0)
+        if pa <= 0 and ip <= 0:
+            continue
+        name = info.get("season_display_name", "")
+        team = info.get("team_display_name", "")
+        seasons.append({
+            "season": name,
+            "team": team,
+            "team_id": row.get("team_id", ""),
+            "source": f"GameChanger \u00b7 {name} \u00b7 {team}".strip(" \u00b7"),
+            "batting": _block(off, BATTING) if pa > 0 else [],
+            "pitching": _block(de, PITCHING) if ip > 0 else [],
+        })
+    seasons.sort(key=lambda s: season_sort_key(s["season"]), reverse=True)
+
+    agg = payload.get("aggregated_stats_data") or {}
+    career = {
+        "source": "GameChanger \u00b7 career total, all teams and ages",
+        "batting": _block(agg.get("offense") or {}, BATTING),
+        "pitching": _block(agg.get("defense") or {}, PITCHING),
+    }
+    return seasons, career
+
+
+def gamechanger_career_stats(profile_id, capability_token, timeout=30.0):
+    headers = {
+        "User-Agent": UA,
+        "Accept": CAREER_STATS_ACCEPT,
+        "Origin": "https://web.gc.com",
+        "Referer": "https://web.gc.com/",
+        "gc-app-name": "web",
+        "gc-device-id": _DEVICE_ID,
+        "gc-ctoken": capability_token,
+    }
+    try:
+        r = httpx.get(f"{GC_API}/public/athlete-profile/{profile_id}/career-stats",
+                      headers=headers, timeout=timeout)
+    except httpx.HTTPError as e:
+        return None, {"code": "unreachable", "message": f"Could not reach GameChanger for stats: {e}"}
+    if r.status_code in (401, 403):
+        return None, {"code": "blocked",
+                      "message": "GameChanger is not serving stats to apps right now. The profile details "
+                                 "came through; add the numbers by hand on the Player tab."}
+    if r.status_code == 204:
+        return None, {"code": "no_stats", "message": "This profile has no stats published yet."}
+    if r.status_code >= 400:
+        return None, {"code": "http_error", "message": f"GameChanger returned {r.status_code} for stats."}
+    try:
+        return r.json(), None
+    except ValueError:
+        return None, {"code": "bad_response", "message": "GameChanger's stats came back unreadable."}

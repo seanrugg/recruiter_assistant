@@ -242,6 +242,11 @@ def coaches_find(site: str, sport: str = ""):
 
 # ---------------------------------------------------------------- the page
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(STATIC / "favicon.png", media_type="image/png")
+
+
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")

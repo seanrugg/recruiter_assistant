@@ -15,9 +15,11 @@ account to create, and no one else can see your player's information.
 
 ## What it does
 
-1. **Paste your player's profile links** — GameChanger, FieldLevel,
-   SportsRecruits, Hudl, YouTube. Their name, sport, class year, positions,
-   height and hometown fill in from those pages.
+1. **Paste your player's profile links.** A published GameChanger profile
+   fills in name, class year and positions, and brings in every season's
+   stats — you choose which seasons go into emails, batting and pitching
+   separately. No GameChanger sign-in needed. FieldLevel adds height, weight
+   and hometown.
 2. **Add the coaches you want to write to.** It shows which ones NCAA rules let
    reply yet, based on class year and division.
 3. **Pick the kind of email:**

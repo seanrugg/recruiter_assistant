@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Settings — Recruiting Desk</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{--ink:#16212B;--ink-3:#7C8A94;--paper:#F6F7F5;--card:#FFF;--line:#DEE2DB;
@@ -66,14 +67,8 @@
 
   <div class="card">
     <h3>GameChanger</h3>
-    <div class="lede">Sign in the way she signs in. This runs on this computer: the password is used for the sign-in and nothing else, and only the session it returns is kept here.</div>
-    <div id="gcstate"></div>
-    <div id="gcform">
-      <label>Email</label><input id="gc-email" type="email" autocomplete="username">
-      <label>Password</label><input id="gc-pass" type="password" autocomplete="current-password">
-      <div class="row"><button id="gc-go">Connect</button><span class="muted" id="gc-msg"></span></div>
-    </div>
-    <div class="row"><button class="ghost" id="gc-out" hidden>Disconnect</button></div>
+    <div class="lede">No sign-in needed. Recruiting Desk reads a <b>published</b> GameChanger athlete profile directly &mdash; name, class year, positions and every season&rsquo;s stats. Paste the profile link on <a href="/">Start here</a>.</div>
+    <div class="muted">If the app says a profile is unpublished, publish it from the GameChanger app first. That is also what lets a coach open the link you send.</div>
   </div>
 </div>
 
@@ -100,14 +95,6 @@ function paint(){
       " each time a draft is written. That is how every cloud assistant works; it is worth knowing about a sixteen-year-old rather than discovering later."
     : "Nothing leaves this computer. Drafts are written by a model running here, so her information never reaches anyone else's servers.";
 
-  var gc = S.gamechanger || {};
-  el("gcstate").innerHTML = gc.connected
-    ? '<div class="note good">Connected. Schedule and stats can be pulled.</div>'
-    : (gc.endpoints_configured && gc.endpoints_configured.length
-        ? ''
-        : '<div class="note bad">Sign-in is not set up in this build, so the app cannot reach GameChanger yet. Everything else works — her numbers get entered by hand on Her info.</div>');
-  el("gcform").hidden = !!gc.connected;
-  el("gc-out").hidden = !gc.connected;
 }
 
 function load(){
@@ -141,17 +128,6 @@ el("test").onclick = function(){
     });
 };
 
-el("gc-go").onclick = function(){
-  el("gc-msg").textContent = "Signing in…";
-  fetch("/api/gc/login", {method:"POST", headers:{"content-type":"application/json"},
-    body: JSON.stringify({email: el("gc-email").value, password: el("gc-pass").value})})
-    .then(function(r){ return r.json().then(function(d){ return {s:r.status,d:d}; }); })
-    .then(function(x){
-      el("gc-pass").value = "";
-      el("gc-msg").textContent = x.d.ok ? "" : (x.d.message || "That did not work.") + (x.d.hint ? " " + x.d.hint : "");
-      load();
-    });
-};
 
 el("quit").onclick = function(){
   fetch("/api/app/quit", {method:"POST"}).finally(function(){
@@ -159,9 +135,6 @@ el("quit").onclick = function(){
   });
 };
 
-el("gc-out").onclick = function(){
-  fetch("/api/gc/disconnect", {method:"POST"}).then(load);
-};
 </script>
 </body>
 </html>

@@ -67,7 +67,7 @@ This is a network service on your computer while it runs. Keep it on
 | Tool | What it does |
 |---|---|
 | `athlete_get`, `athlete_save` | Read and update the player record |
-| `profile_link_inspect` | Read a GameChanger, FieldLevel, SportsRecruits, Hudl or YouTube link |
+| `profile_link_inspect` | Read a GameChanger, FieldLevel, SportsRecruits, Hudl or YouTube link. For GameChanger this includes season-by-season stats. |
 | `program_list`, `program_save` | The coach list, with NCAA contact windows resolved |
 | `coach_directory_find`, `coach_directory_read` | Pull coaching staff from a college athletics site |
 | `draft_brief` | Everything needed to write one email, with sources |

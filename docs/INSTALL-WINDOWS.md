@@ -40,8 +40,11 @@ computer and shows up in the browser. The address will start with
 On the **Start here** tab:
 
 1. Choose **Softball** or **Baseball** and click **Start**.
-2. **Paste a profile link** — GameChanger or FieldLevel work best. Tick the
-   details it finds and click **Use the ticked ones**.
+2. **Paste the player's GameChanger profile link** (it looks like
+   `web.gc.com/athlete/...`). Tick the details it finds and click
+   **Use the ticked ones**, then tick which seasons' stats to use and click
+   **Add ticked seasons to the stat line**. The profile has to be published in
+   the GameChanger app.
 3. Open **Settings** (top right) and choose which AI writes the drafts. Read the
    note about where information goes before you pick.
 

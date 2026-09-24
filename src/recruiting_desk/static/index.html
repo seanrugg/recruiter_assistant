@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Recruiting Desk</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -180,8 +181,7 @@
   function setup(a){
     var t = targetsFor(a?a.id:"");
     return [
-      {k:"connect", done:!!(a&&a.gcConnected), label:"Connect the GameChanger account", hint:"Pulls the schedule, box scores and video so nothing gets retyped."},
-      {k:"links",   done:!!(a&&(a.links||[]).length), label:"Add their profile links", hint:"FieldLevel, SportsRecruits, GameChanger, a highlight reel. Most of the player’s details come straight off these."},
+      {k:"links",   done:!!(a&&(a.links||[]).length), label:"Add their profile links", hint:"Start with GameChanger \u2014 name, class year, positions and every season\u2019s stats come straight off a published profile. FieldLevel adds height, weight and hometown."},
       {k:"basics",  done:!!(a&&a.name&&a.gradYear&&a.positions), label:"Fill in the player’s details", hint:"Name, sport, class year, positions."},
       {k:"stats",   done:!!(a&&(a.stats||[]).length), label:"Add the stat line", hint:"Nothing can go in an email that isn't here first."},
       {k:"voice",   done:!!(a&&(a.voice||"").trim().length>120), label:"Paste something the player wrote", hint:"A few paragraphs in their own words. This is what stops emails sounding like a parent."},
@@ -217,19 +217,6 @@
     }
     var steps=setup(a), left=steps.filter(function(s){return !s.done;});
     host.innerHTML = picker()+ pasteCard(a) +
-      (a.gcConnected
-        ? '<div class="card"><h3>GameChanger</h3><div class="lede">Connected as '+esc(a.gcEmail||"the account")+
-          '. Schedule and stats refresh when you open the app.</div>'+
-          '<button class="btn ghost" id="disc">Disconnect</button></div>'
-        : '<div class="card"><h3>Connect GameChanger</h3>'+
-          '<div class="lede">Sign in the same way the player does. The app reads their teams, schedule, box scores and video — it never posts, changes or deletes anything.</div>'+
-          '<div class="cred"><label>Email</label><input id="gc-email" type="email" autocomplete="username" placeholder="parent@example.com">'+
-          '<label>Password</label><input id="gc-pass" type="password" autocomplete="current-password">'+
-          '<button class="btn" id="gc-go" style="margin-top:12px">Connect</button></div>'+
-          '<div class="banner stop" style="margin-top:14px"><b>Prototype.</b> This form does not connect to anything. '+
-          'GameChanger has no sign-in-with button, so a real version has to handle a real account password — which is only safe in an app installed on this computer, where the password never leaves it. '+
-          'Everything else here works; use “Enter by hand” below.</div>'+
-          '<button class="btn ghost" id="manual" style="margin-top:6px">Enter stats by hand instead</button></div>')+
 
       '<div class="card"><h3>'+(left.length? "Before the first email goes out" : "Ready to write")+'</h3>'+
         '<div class="lede">'+(left.length? (left.length+" thing"+(left.length>1?"s":"")+" left.") : "The record is complete. Pick a coach and an email on the Write tab.")+'</div>'+
@@ -249,16 +236,11 @@
 
     wirePicker();
     wirePaste(a, host);
-    if(el("gc-go")) el("gc-go").onclick=function(){
-      alert("Not wired up in the prototype. A shipped version would sign in here from the installed app, keep the password on this computer, and store only the session it gets back.");
-    };
-    if(el("manual")) el("manual").onclick=function(){ switchView("player"); };
-    if(el("disc")) el("disc").onclick=function(){ a.gcConnected=false; putAthlete(a); render(); };
     el("new2").onclick=function(){ newAthlete((A()||{}).sport||"softball"); };
   }
   function newAthlete(sport){
     var r={id:uid(),name:"",sport:sport||"softball",pronouns:"",gradYear:"",school:"",club:"",jersey:"",positions:"",gpa:"",tests:"",major:"",
-           email:"",phone:"",coachRef:"",voice:"",stats:[],events:[],links:[],socials:[],gcConnected:false,gcEmail:""};
+           email:"",phone:"",coachRef:"",voice:"",stats:[],events:[],links:[],socials:[]};
     putAthlete(r); S.aid=r.id; switchView("player");
   }
 
@@ -312,8 +294,8 @@
     fetch("/api/profile/inspect?url="+encodeURIComponent(who.url))
       .then(function(res){ return res.ok? res.json() : Promise.reject(); })
       .then(function(d){
-        linkState={busy:false,result:d,
-          msg:(d.label||who.label)+" saved. "+(d.message||who.note||"")};
+        linkState={busy:false,result:d,picked:null,
+          msg:(d.label||who.label)+" saved. "+(d.message||who.note||"")+(d.stats_message?" "+d.stats_message:"")};
         render();
       })
       .catch(function(){
@@ -322,6 +304,78 @@
             " Reading the page for details only works in the installed app.")};
         render();
       });
+  }
+
+  function seasonYear(name){ var m=String(name||"").match(/(\d{4})/); return m?+m[1]:0; }
+  function statBits(block, keep){
+    return (block||[]).filter(function(b){ return keep.indexOf(b.label)>=0; })
+      .map(function(b){ return b.label+" "+b.value; }).join(" \u00b7 ");
+  }
+  var BAT_KEEP=["PA","AVG","OBP","SLG","OPS","RBI"], PIT_KEEP=["IP","ERA","K","BB","WHIP"];
+  var PITCH_MIN_IP=5;
+  function inningsOf(s){
+    var ip=(s.pitching||[]).filter(function(b){ return b.label==="IP"; })[0];
+    if(!ip) return 0;
+    var parts=String(ip.value).split("."); return (+parts[0]||0)+((+parts[1]||0)/3);
+  }
+
+  function seasonPicker(r){
+    if(!r||!r.seasons||!r.seasons.length) return "";
+    if(!linkState.picked){
+      // Defaults are only a starting point, and every one is visible:
+      // batting for the newest year's seasons; pitching only where there is
+      // a real sample, so a 1-inning outing never reaches a coach unchosen.
+      var newest=seasonYear(r.seasons[0].season);
+      linkState.picked=r.seasons.map(function(s){
+        var recent=seasonYear(s.season)===newest;
+        return {bat: recent && (s.batting||[]).length>0, pit: recent && inningsOf(s)>=PITCH_MIN_IP};
+      });
+      linkState.pickedCareer=false;
+    }
+    var rows=r.seasons.map(function(s,i){
+      var bat=statBits(s.batting,["PA","AVG","OBP","OPS"]), pit=statBits(s.pitching,["IP","ERA","K"]);
+      var pk=linkState.picked[i], small=pit && inningsOf(s)<PITCH_MIN_IP;
+      return '<div class="stat-line" style="display:block;padding:9px 0">'+
+        '<div><b style="font-weight:600">'+esc(s.season)+'</b> <span class="muted">'+esc(s.team)+'</span></div>'+
+        (bat?'<label class="muted" style="display:flex;gap:8px;align-items:center;margin:4px 0 0">'+
+          '<input type="checkbox" data-season="'+i+'" data-part="bat"'+(pk.bat?' checked':'')+' style="width:auto">Batting: '+esc(bat)+'</label>':'')+
+        (pit?'<label class="muted" style="display:flex;gap:8px;align-items:center;margin:4px 0 0">'+
+          '<input type="checkbox" data-season="'+i+'" data-part="pit"'+(pk.pit?' checked':'')+' style="width:auto">Pitching: '+esc(pit)+
+          (small?' <span class="pill wait" style="margin-left:4px">small sample</span>':'')+'</label>':'')+
+        '</div>';
+    }).join("");
+    var c=r.career, career = c ? '<label class="stat-line" style="gap:10px;align-items:flex-start">'+
+        '<input type="checkbox" data-season="career"'+(linkState.pickedCareer?' checked':'')+' style="width:auto;margin-top:4px">'+
+        '<span style="flex:1"><b style="font-weight:600">Career total</b> <span class="muted">every team and age group</span>'+
+        '<div class="muted">Usually not what a college coach wants \u2014 it mixes in younger-age ball. Recent seasons tell them more.</div></span></label>' : "";
+    return '<div style="margin-top:16px"><h3 style="margin:0 0 4px">Stats from GameChanger</h3>'+
+      '<div class="lede">'+r.seasons.length+' seasons found. Tick what belongs in emails \u2014 batting and pitching separately. Each number will name the season and team it came from.</div>'+
+      '<div style="max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:0 10px">'+rows+career+'</div>'+
+      '<button class="btn" id="addseasons" style="margin-top:10px">Add ticked seasons to the stat line</button></div>';
+  }
+
+  function addSeasons(a, r){
+    var chosen=[];
+    r.seasons.forEach(function(s,i){
+      var pk=linkState.picked[i];
+      if(pk.bat||pk.pit) chosen.push({source:s.source, batting:pk.bat?s.batting:[], pitching:pk.pit?s.pitching:[]});
+    });
+    if(linkState.pickedCareer && r.career) chosen.push({source:r.career.source,batting:r.career.batting,pitching:r.career.pitching});
+    a.stats=a.stats||[];
+    var added=0;
+    chosen.forEach(function(s){
+      var items=[];
+      (s.batting||[]).forEach(function(b){ if(BAT_KEEP.indexOf(b.label)>=0) items.push({label:b.label,value:b.value}); });
+      (s.pitching||[]).forEach(function(b){
+        if(PIT_KEEP.indexOf(b.label)>=0) items.push({label:(b.label==="K"||b.label==="BB")?"Pitching "+b.label:b.label, value:b.value});
+      });
+      items.forEach(function(it){
+        a.stats=a.stats.filter(function(x){ return !(x.label===it.label && x.source===s.source); });
+        a.stats.push({label:it.label,value:it.value,source:s.source}); added++;
+      });
+    });
+    putAthlete(a);
+    return {numbers:added, seasons:chosen.length};
   }
 
   function pasteCard(a){
@@ -339,7 +393,7 @@
       '<div class="row"><div class="grow"><input id="pastelink" placeholder="https://..." autocomplete="off"></div>'+
       '<button class="btn" id="pastego"'+(linkState.busy?' disabled':'')+'>'+(linkState.busy?"Reading\u2026":"Add")+'</button></div>'+
       (linkState.msg? '<div class="banner" style="margin-top:10px">'+esc(linkState.msg)+'</div>':"")+
-      sugg+'</div>';
+      sugg+seasonPicker(r)+'</div>';
   }
 
   function wirePaste(a,host){
@@ -360,7 +414,26 @@
         var x=r.suggestions[+c.getAttribute("data-sg")];
         if(x && x.value) a[x.field]=x.value;
       });
-      putAthlete(a); linkState={busy:false,msg:"Added to the record. Check each one.",result:null}; render();
+      putAthlete(a);
+      if(r.seasons&&r.seasons.length){ r.suggestions=[]; linkState.msg="Added to the record. Now choose which seasons' stats to use."; }
+      else linkState={busy:false,msg:"Added to the record. Check each one.",result:null};
+      render();
+    };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-season]"),function(c){
+      c.onchange=function(){
+        var k=c.getAttribute("data-season");
+        if(k==="career") linkState.pickedCareer=c.checked;
+        else linkState.picked[+k][c.getAttribute("data-part")]=c.checked;
+      };
+    });
+    var addS=el("addseasons");
+    if(addS) addS.onclick=function(){
+      var r=linkState.result; if(!r) return;
+      var n=addSeasons(a,r);
+      linkState={busy:false,result:null,
+        msg: n.numbers ? ("Added "+n.numbers+" numbers from "+n.seasons+" season"+(n.seasons===1?"":"s")+" to the stat line. Each one names its season and team \u2014 see the Player tab.")
+                       : "No seasons were ticked, so nothing was added."};
+      render();
     };
   }
 
