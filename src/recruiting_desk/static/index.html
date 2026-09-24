@@ -191,6 +191,22 @@
 
   /* ---------- views ---------- */
   var VIEW="home";
+
+  /* Background data refreshes redraw the page. Anything half-typed into an
+     unsaved box -- a search, a link, a new coach's details -- must survive
+     that, along with which box has focus. User actions call render() directly
+     and are allowed to clear fields; only refresh-driven redraws preserve. */
+  function softRender(){
+    var host=el("view-"+VIEW), keep={}, active=document.activeElement, focusId=active&&active.id, caret=null;
+    if(host) Array.prototype.forEach.call(host.querySelectorAll("input[id],textarea[id]"),function(i){
+      if(i.type!=="file"&&i.type!=="checkbox"&&i.value) keep[i.id]=i.value;
+    });
+    if(focusId&&typeof active.selectionStart==="number"){ try{ caret=active.selectionStart; }catch(e){} }
+    render();
+    Object.keys(keep).forEach(function(id){ var n=el(id); if(n&&!n.value) n.value=keep[id]; });
+    if(focusId&&el(focusId)){ var f=el(focusId); f.focus(); if(caret!==null){ try{ f.setSelectionRange(caret,caret); }catch(e){} } }
+  }
+
   function render(){
     var a=A();
     el("who").textContent = a ? (a.name||"Unnamed player") + " · " + (a.sport||"softball") + (athleteList().length>1?" · "+athleteList().length+" players":"") : "";
@@ -547,6 +563,87 @@
   }
 
   /* --- Coaches --- */
+  var CS={mode:"find", busy:false, msg:"", schools:null, school:null, coaches:null, ticks:[], preview:null, iticks:[]};
+
+  function existingEmails(a){
+    var set={}; targetsFor(a.id).forEach(function(t){ if(t.coachEmail) set[t.coachEmail.toLowerCase()]=1; }); return set;
+  }
+  function looksLikeSite(q){ return /\.(com|edu|org|net|us)\b|^https?:\/\//i.test(q) && q.indexOf(" ")<0; }
+
+  function findBody(a){
+    var h='<div class="lede">Search by school name. Coaches come straight from the school\u2019s own athletics site, '+
+      'for this player\u2019s sport ('+esc(a.sport||"softball")+'). NCAA schools only \u2014 for a junior college or NAIA school, paste its athletics website address instead.</div>'+
+      '<div class="row"><div class="grow"><input id="sch-q" placeholder="School name, or its athletics website" value="'+esc(CS.q||"")+'" autocomplete="off"></div>'+
+      '<button class="btn" id="sch-go"'+(CS.busy?' disabled':'')+'>'+(CS.busy?"Searching\u2026":"Search")+'</button></div>';
+    if(CS.msg) h+='<div class="banner" style="margin-top:10px">'+esc(CS.msg)+'</div>';
+    if(CS.schools && !CS.coaches){
+      h+= CS.schools.length ? CS.schools.map(function(s,i){
+        return '<div class="listrow"><div class="grow"><div class="name">'+esc(s.name)+'</div>'+
+          '<div class="meta">Division '+esc(s.division)+(s.conference?' \u00b7 '+esc(s.conference):'')+(s.state?' \u00b7 '+esc(s.state):'')+'</div>'+
+          '<div class="meta">'+esc(s.athletics_url||"no athletics site listed")+'</div></div>'+
+          '<button class="btn ghost" data-sch="'+i+'"'+(s.athletics_url?'':' disabled')+'>Show coaches</button></div>';
+      }).join("") : '<div class="empty" style="margin-top:10px">No NCAA school matches that. Try fewer words, or paste the athletics website.</div>';
+    }
+    if(CS.coaches){
+      var have=existingEmails(a);
+      var line=function(c,i){
+        var dup=c.email && have[c.email.toLowerCase()];
+        return '<label class="stat-line" style="gap:10px;align-items:flex-start">'+
+          '<input type="checkbox" data-ck="'+i+'"'+(CS.ticks[i]?' checked':'')+(dup?' disabled':'')+' style="width:auto;margin-top:4px">'+
+          '<span style="flex:1"><b style="font-weight:600">'+esc(c.name||"(no name)")+'</b> <span class="muted">'+esc(c.title||"")+'</span>'+
+          '<div class="muted">'+(c.email?esc(c.email):'<span style="color:var(--wait)">No email published by the school \u2014 left blank, not guessed</span>')+
+          (c.phone?' \u00b7 '+esc(c.phone):'')+(dup?' \u00b7 <b>already on the list</b>':'')+'</div></span></label>';
+      };
+      var staff=CS.coaches.map(function(c,i){ return c.support_staff?"":line(c,i); }).join("");
+      var support=CS.coaches.map(function(c,i){ return c.support_staff?line(c,i):""; }).join("");
+      h+='<div style="margin-top:14px"><div class="row" style="justify-content:space-between;align-items:baseline">'+
+        '<h3 style="margin:0">'+esc(CS.school.name)+'</h3><button class="btn quiet" id="sch-back">\u2190 Back to results</button></div>'+
+        '<div class="muted">Division '+esc(CS.school.division||"?")+' \u00b7 read from <a href="'+esc(CS.sourceUrl)+'" target="_blank" rel="noopener">'+esc(CS.sourceUrl)+'</a></div>'+
+        (CS.note?'<div class="banner" style="margin-top:8px">'+esc(CS.note)+'</div>':'')+
+        '<div style="margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:0 10px">'+
+        (staff||'<div class="muted" style="padding:10px 0">No coaching staff listed.</div>')+
+        (support?'<div class="muted" style="padding:10px 0 2px;font-weight:600">Support staff \u2014 trainers, operations, communications. Rarely who to write to.</div>'+support:'')+
+        '</div><button class="btn" id="ck-add" style="margin-top:10px">Add ticked coaches</button></div>';
+    }
+    return h;
+  }
+
+  function importBody(a){
+    var h='<div class="lede">A spreadsheet of coaches \u2014 Excel (.xlsx) or CSV. It needs a heading row with an Email column, '+
+      'plus whatever else you have: School, Division, Location, Coach or Name, Title, Phone, Notes. Nothing is added until you tick it.</div>'+
+      '<input type="file" id="imp-file" accept=".csv,.xlsx,.xlsm,text/csv">';
+    if(CS.msg) h+='<div class="banner" style="margin-top:10px">'+esc(CS.msg)+'</div>';
+    var p=CS.preview;
+    if(p && p.rows){
+      var have=existingEmails(a);
+      var ready=0;
+      var rows=p.rows.map(function(r,i){
+        var dup=r.coachEmail && have[r.coachEmail.toLowerCase()];
+        var ok=r.usable && !dup; if(ok) ready++;
+        var probs=r.problems.slice(); if(dup) probs.push("already on the list");
+        return '<tr><td><input type="checkbox" data-ir="'+i+'"'+(CS.iticks[i]&&ok?' checked':'')+(ok?'':' disabled')+' style="width:auto"></td>'+
+          '<td>'+esc(r.school)+'</td><td>'+esc(r.division)+'</td><td>'+esc(r.coachName)+'</td><td>'+esc(r.coachEmail)+'</td>'+
+          '<td style="color:var(--wait)">'+esc(probs.join("; "))+'</td></tr>';
+      }).join("");
+      h+='<div style="margin-top:12px"><b>'+ready+' ready to add</b><span class="muted"> of '+p.total+' rows \u00b7 headings found on line '+p.header_line+': '+esc(p.columns.join(", "))+'</span></div>'+
+        '<div class="scroll-x" style="margin-top:6px;max-height:380px;overflow:auto"><table><thead><tr><th></th><th>School</th><th>Div</th><th>Coach</th><th>Email</th><th>Needs attention</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+        '<button class="btn" id="imp-add" style="margin-top:10px">Add ticked coaches</button>';
+    }
+    return h;
+  }
+
+  function manualBody(){
+    return '<div class="row">'+
+        '<div class="grow"><label>School</label><input id="c-school"></div>'+
+        '<div class="grow" style="max-width:120px"><label>Division</label><select id="c-div">'+
+          ["I","II","III","NAIA","JUCO"].map(function(d){return '<option>'+d+'</option>';}).join("")+'</select></div>'+
+        '<div class="grow"><label>Where</label><input id="c-loc"></div></div>'+
+      '<div class="row"><div class="grow"><label>Coach</label><input id="c-name"></div>'+
+        '<div class="grow"><label>Email</label><input id="c-email" type="email"></div></div>'+
+      '<label>Why this school, in the player\u2019s words</label><textarea id="c-fit" rows="2" placeholder="They graduate two pitchers next year and it has the major they want."></textarea>'+
+      '<button class="btn" id="c-add" style="margin-top:8px">Add coach</button>';
+  }
+
   function renderCoaches(){
     var a=A(), host=el("view-coaches");
     if(!a){ host.innerHTML='<div class="empty">Add an athlete first.</div>'; return; }
@@ -560,33 +657,127 @@
       var last=hist.length?('<span class="pill">'+esc(hist[hist.length-1].kind)+' '+esc(hist[hist.length-1].date)+'</span>'):"";
       var watched=t.watched?'<span class="pill live">Came to watch</span>':"";
       return '<div class="listrow"><div class="grow"><div class="name">'+esc(t.school)+'</div>'+
-        '<div class="meta">'+esc(t.division)+' · '+esc(t.location||"")+' · '+esc(t.coachName||"no coach named")+'</div>'+
+        '<div class="meta">'+esc(t.division)+' \u00b7 '+esc(t.location||"")+' \u00b7 '+esc(t.coachName||"no coach named")+(t.title?' ('+esc(t.title)+')':'')+'</div>'+
         '<div class="meta">'+esc(t.coachEmail||"no email")+'</div>'+
         (t.note?'<div class="meta" style="color:var(--wait)">'+esc(t.note)+'</div>':'')+
         '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">'+pill+last+watched+'</div></div>'+
         '<div style="display:flex;flex-direction:column;gap:6px">'+
         '<button class="btn" data-w="'+esc(t.id)+'">Write</button>'+
         '<button class="btn quiet" data-x="'+esc(t.id)+'">Remove</button></div></div>';
-    }).join("") || '<div class="empty">No coaches yet. Add the first one below.</div>';
+    }).join("") || '<div class="empty">No coaches yet. Find a school or import a list above.</div>';
 
-    host.innerHTML = picker()+ rows +
-      '<div class="card"><h3>Add a coach</h3><div class="row">'+
-        '<div class="grow"><label>School</label><input id="c-school"></div>'+
-        '<div class="grow" style="max-width:120px"><label>Division</label><select id="c-div">'+
-          ["I","II","III","NAIA","JUCO"].map(function(d){return '<option>'+d+'</option>';}).join("")+'</select></div>'+
-        '<div class="grow"><label>Where</label><input id="c-loc"></div></div>'+
-      '<div class="row"><div class="grow"><label>Coach</label><input id="c-name"></div>'+
-        '<div class="grow"><label>Email</label><input id="c-email" type="email"></div></div>'+
-      '<label>Why this school, in the player’s words</label><textarea id="c-fit" rows="2" placeholder="They graduate two pitchers in 2029 and it has the major they want."></textarea>'+
-      '<button class="btn" id="c-add" style="margin-top:8px">Add coach</button></div>';
+    var modes=[["find","Find a school"],["import","Import a list"],["manual","Type one in"]];
+    host.innerHTML = picker()+
+      '<div class="card"><h3>Add coaches</h3>'+
+      '<div class="row" style="gap:6px;margin:6px 0 12px">'+modes.map(function(m){
+        return '<button class="btn'+(CS.mode===m[0]?'':' ghost')+'" data-mode="'+m[0]+'">'+m[1]+'</button>'; }).join("")+'</div>'+
+      (CS.mode==="find"?findBody(a):CS.mode==="import"?importBody(a):manualBody())+'</div>'+
+      '<h3 style="margin:18px 0 4px;font-size:15px">'+(list.length?list.length+' coach'+(list.length===1?'':'es')+' on the list':'The list')+'</h3>'+
+      rows;
 
     wirePicker();
-    el("c-add").onclick=function(){ var s=el("c-school").value.trim(); if(!s)return;
-      putTarget({id:uid(),athleteId:a.id,school:s,division:el("c-div").value,location:el("c-loc").value.trim(),
-        coachName:el("c-name").value.trim(),coachEmail:el("c-email").value.trim(),fit:el("c-fit").value.trim(),
-        tier:"3",log:[],watched:false,note:""}); render(); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-mode]"),function(b){
+      b.onclick=function(){ CS.mode=b.getAttribute("data-mode"); CS.msg=""; render(); };
+    });
+
+    // ---- find a school
+    if(CS.mode==="find"){
+      var q=el("sch-q"), go=el("sch-go");
+      q.onkeydown=function(e){ if(e.key==="Enter") go.click(); };
+      go.onclick=function(){
+        var v=q.value.trim(); if(!v) return;
+        CS.q=v; CS.msg=""; CS.coaches=null; CS.schools=null;
+        if(looksLikeSite(v)){ showCoaches(a,{name:v.replace(/^https?:\/\//,"").replace(/\/.*$/,""),division:"",state:"",athletics_url:v}); return; }
+        CS.busy=true; render();
+        fetch("/api/schools/search?q="+encodeURIComponent(v)).then(function(r){ return r.json(); })
+          .then(function(d){ CS.busy=false; CS.schools=d.schools||[]; if(!d.ok) CS.msg=(d.error&&d.error.message)||"Search failed."; render(); })
+          .catch(function(){ CS.busy=false; CS.msg="School search only works in the installed app."; render(); });
+      };
+      Array.prototype.forEach.call(host.querySelectorAll("[data-sch]"),function(b){
+        b.onclick=function(){ showCoaches(a, CS.schools[+b.getAttribute("data-sch")]); };
+      });
+      if(el("sch-back")) el("sch-back").onclick=function(){ CS.coaches=null; CS.msg=""; render(); };
+      Array.prototype.forEach.call(host.querySelectorAll("[data-ck]"),function(c){
+        c.onchange=function(){ CS.ticks[+c.getAttribute("data-ck")]=c.checked; };
+      });
+      if(el("ck-add")) el("ck-add").onclick=function(){
+        var n=0, have=existingEmails(a);
+        CS.coaches.forEach(function(c,i){
+          if(!CS.ticks[i]) return;
+          if(c.email && have[c.email.toLowerCase()]) return;
+          putTarget({id:uid(),athleteId:a.id,school:CS.school.name,division:CS.school.division||"",
+            location:[CS.school.city,CS.school.state].filter(Boolean).join(", "),
+            coachName:c.name,title:c.title||"",coachEmail:c.email||"",fit:"",tier:"3",log:[],watched:false,
+            note:c.email?"From the school\u2019s staff page \u2014 confirm on "+c.source_url+" before writing."
+                        :"No email published by the school. Find it before writing."});
+          n++;
+        });
+        CS.coaches=null; CS.schools=null; CS.q="";
+        CS.msg=n?("Added "+n+" coach"+(n===1?"":"es")+" from "+CS.school.name+"."):"Nothing ticked, so nothing was added.";
+        render();
+      };
+    }
+
+    // ---- import a list
+    if(CS.mode==="import"){
+      el("imp-file").onchange=function(){
+        var f=this.files&&this.files[0]; if(!f) return;
+        var fr=new FileReader();
+        fr.onload=function(){
+          var b64=String(fr.result).split(",")[1]||"";
+          CS.msg="Reading "+f.name+"\u2026"; CS.preview=null; render();
+          fetch("/api/coaches/import",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({filename:f.name,data:b64})})
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+              if(!d.ok){ CS.msg=d.error||"That file couldn\u2019t be read."; CS.preview=null; render(); return; }
+              CS.preview=d; CS.iticks=d.rows.map(function(r){ return r.usable; }); CS.msg=""; render();
+            })
+            .catch(function(){ CS.msg="Importing a list only works in the installed app."; render(); });
+        };
+        fr.readAsDataURL(f);
+      };
+      Array.prototype.forEach.call(host.querySelectorAll("[data-ir]"),function(c){
+        c.onchange=function(){ CS.iticks[+c.getAttribute("data-ir")]=c.checked; };
+      });
+      if(el("imp-add")) el("imp-add").onclick=function(){
+        var n=0, have=existingEmails(a);
+        CS.preview.rows.forEach(function(r,i){
+          if(!CS.iticks[i]||!r.usable) return;
+          var e=r.coachEmail.toLowerCase(); if(have[e]) return; have[e]=1;
+          putTarget({id:uid(),athleteId:a.id,school:r.school,division:r.division,location:r.location,
+            coachName:r.coachName,title:r.title,coachEmail:r.coachEmail,phone:r.phone,fit:r.fit,tier:"3",log:[],watched:false,
+            note:r.division?"":"Division not set \u2014 needed to check when this coach may reply."});
+          n++;
+        });
+        CS.preview=null; CS.msg="Added "+n+" coach"+(n===1?"":"es")+" from the list.";
+        render();
+      };
+    }
+
+    // ---- type one in
+    if(CS.mode==="manual"){
+      el("c-add").onclick=function(){ var s=el("c-school").value.trim(); if(!s)return;
+        putTarget({id:uid(),athleteId:a.id,school:s,division:el("c-div").value,location:el("c-loc").value.trim(),
+          coachName:el("c-name").value.trim(),coachEmail:el("c-email").value.trim(),fit:el("c-fit").value.trim(),
+          tier:"3",log:[],watched:false,note:""}); render(); };
+    }
+
     Array.prototype.forEach.call(host.querySelectorAll("[data-w]"),function(b){ b.onclick=function(){ S.tid=b.getAttribute("data-w"); switchView("write"); }; });
     Array.prototype.forEach.call(host.querySelectorAll("[data-x]"),function(b){ b.onclick=function(){ dropTarget(b.getAttribute("data-x")); render(); }; });
+  }
+
+  function showCoaches(a, school){
+    CS.busy=true; CS.school=school; CS.msg="Reading "+(school.name||"the site")+"\u2019s coaching staff\u2026"; render();
+    fetch("/api/schools/coaches?site="+encodeURIComponent(school.athletics_url)+"&sport="+encodeURIComponent(a.sport||"softball"))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        CS.busy=false;
+        if(!d.ok){ CS.msg=(d.error&&d.error.message||"Couldn\u2019t read that site.")+(d.error&&d.error.hint?" "+d.error.hint:""); CS.coaches=null; render(); return; }
+        CS.coaches=d.coaches; CS.sourceUrl=d.source_url; CS.note=d.note; CS.msg="";
+        CS.ticks=d.coaches.map(function(c){ return !c.support_staff && !!c.email; });
+        render();
+      })
+      .catch(function(){ CS.busy=false; CS.msg="Reading a school\u2019s site only works in the installed app."; render(); });
   }
 
   /* --- Write --- */
@@ -796,9 +987,9 @@
       var db=await claude.use("db");
       if(db){
         S.db=db;
-        db.collection("athletes").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); S.athletes=n; render(); },function(){});
-        db.collection("targets").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); S.targets=n; render(); },function(){});
-        db.doc("config/rules").onSnapshot(function(s){ S.rules = s.exists? clone(s.data()) : defaultRules(); render(); },function(){});
+        db.collection("athletes").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); S.athletes=n; softRender(); },function(){});
+        db.collection("targets").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); S.targets=n; softRender(); },function(){});
+        db.doc("config/rules").onSnapshot(function(s){ S.rules = s.exists? clone(s.data()) : defaultRules(); softRender(); },function(){});
       } else { if(!S.rules) S.rules=defaultRules(); render(); }
     }catch(e){}
   })();

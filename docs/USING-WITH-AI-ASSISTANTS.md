@@ -69,7 +69,10 @@ This is a network service on your computer while it runs. Keep it on
 | `athlete_get`, `athlete_save` | Read and update the player record |
 | `profile_link_inspect` | Read a GameChanger, FieldLevel, SportsRecruits, Hudl or YouTube link. For GameChanger this includes season-by-season stats. |
 | `program_list`, `program_save` | The coach list, with NCAA contact windows resolved |
-| `coach_directory_find`, `coach_directory_read` | Pull coaching staff from a college athletics site |
+| `school_search` | Find an NCAA school by name, with division and official athletics site |
+| `school_coaches` | Read a school's coaching staff for the player's sport |
+| `coach_list_import` | Preview a coach list from an Excel or CSV file |
+| `coach_directory_find`, `coach_directory_read` | Read staff from any athletics page, for sites the above doesn't handle |
 | `draft_brief` | Everything needed to write one email, with sources |
 | `outreach_log_entry`, `follow_ups_due` | What was sent, and who hasn't answered |
 

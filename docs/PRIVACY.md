@@ -17,7 +17,8 @@ server, no account, no analytics, and no telemetry. We never see any of it.
 | A draft is written with Claude, ChatGPT or Grok | Anthropic, OpenAI or xAI | The player's name, school, stats, schedule, the coach's name, and the writing sample |
 | A draft is written with Ollama or a local Open WebUI | Nobody | Nothing leaves the computer |
 | A profile link is pasted | That site (GameChanger, FieldLevel, etc.) | A request for that one public page |
-| Coach directory lookup | That college's website | A request for its public staff page |
+| School search | The NCAA | One download of the public member directory, refreshed monthly |
+| Coach lookup | That college's athletics website | A request for its public coaching staff page |
 
 AI providers each have their own policies about what they keep and for how long.
 If that matters to you, choose a local model.

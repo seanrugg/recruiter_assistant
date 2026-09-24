@@ -8,7 +8,7 @@ sent anywhere else; the athlete's record and coach list are JSON files in the
 same folder; the AI key is in settings.json.
 
 The one thing that does leave, if the family chooses a cloud assistant, is the
-text of the draft prompt -- her stats, her school, her schedule. The settings
+text of the draft prompt -- the player's stats, school and schedule. The settings
 screen says so, and choosing Ollama means nothing leaves at all.
 
 Bound to 127.0.0.1 deliberately. This is not a server for other people.
@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from . import llm
 from . import campaign
 from . import coach_finder
+from . import coach_import
 from . import profiles as profile_links
 from .gc_client import GameChangerClient, load_config, NotConfigured, AuthExpired, TOKEN_FILE, CONFIG_DIR
 
@@ -43,6 +44,14 @@ gc = GameChangerClient(BASE_URL, ENDPOINTS)
 # The UI's three collections map onto the files the MCP server also reads, so an
 # assistant driving the tools and a parent clicking the app see the same data.
 FILES = {"athletes": "athletes.json", "targets": "programs.json", "config": "contact_rules_store.json"}
+
+
+# Every save reads the whole file, changes one record, and writes it back. The
+# app serves requests in parallel, so without this lock two saves arriving
+# together each read the old file and the second overwrites the first --
+# importing 23 coaches lost 5 that way. One lock makes each read-change-write
+# happen whole.
+_write_lock = threading.Lock()
 
 
 def _read(collection):
@@ -80,17 +89,19 @@ class Doc(BaseModel):
 
 @app.put("/api/db/{collection}/{doc_id}")
 def db_set(collection: str, doc_id: str, body: Doc):
-    docs = _read(collection)
-    docs[doc_id] = body.data
-    _write(collection, docs)
+    with _write_lock:
+        docs = _read(collection)
+        docs[doc_id] = body.data
+        _write(collection, docs)
     return {"ok": True}
 
 
 @app.delete("/api/db/{collection}/{doc_id}")
 def db_delete(collection: str, doc_id: str):
-    docs = _read(collection)
-    docs.pop(doc_id, None)
-    _write(collection, docs)
+    with _write_lock:
+        docs = _read(collection)
+        docs.pop(doc_id, None)
+        _write(collection, docs)
     return {"ok": True}
 
 
@@ -169,7 +180,7 @@ def gc_login(body: Login):
             "ok": False, "code": "not_configured",
             "message": "Sign-in is not set up in this build.",
             "hint": "Add the login path under [endpoints] in config.toml. Until then, "
-                    "enter her stats by hand -- everything else in the app works."})
+                    "enter the stats by hand -- everything else in the app works."})
     import httpx
     url = path if path.startswith("http") else BASE_URL + "/" + path.lstrip("/")
     try:
@@ -229,6 +240,27 @@ def profile_inspect(url: str):
 
 
 # ---------------------------------------------------------------- coach data
+
+@app.get("/api/schools/search")
+def schools_search(q: str):
+    return coach_finder.search_schools(q)
+
+
+@app.get("/api/schools/coaches")
+def schools_coaches(site: str, sport: str = "softball"):
+    return coach_finder.school_coaches(site, sport)
+
+
+class Upload(BaseModel):
+    filename: str
+    data: str   # base64
+
+
+@app.post("/api/coaches/import")
+def coaches_import(body: Upload):
+    """Preview only. Nothing is added until the person ticks rows in the app."""
+    return coach_import.parse_upload(body.filename, body.data)
+
 
 @app.get("/api/coaches/read")
 def coaches_read(url: str, sport: str = ""):

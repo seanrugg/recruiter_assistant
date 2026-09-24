@@ -6,8 +6,8 @@ there are two adapters here, not five. Adding LM Studio, Groq, OpenRouter or
 anything else OpenAI-shaped is a line in PROVIDERS, not new code.
 
 Where the data goes differs per provider, and the app says so plainly rather
-than burying it: with a cloud provider, her name, school, stats and the field
-she will be standing on Saturday are sent to that company. With Ollama nothing
+than burying it: with a cloud provider, the player's name, school, stats and the field
+they will be standing on Saturday are sent to that company. With Ollama nothing
 leaves the machine. That is a real choice for a family to make about a sixteen-
 year-old, not a technical detail.
 
@@ -87,7 +87,9 @@ def save_settings(data):
     HOME.mkdir(parents=True, exist_ok=True)
     current = load_settings()
     current.update(data)
-    SETTINGS.write_text(json.dumps(current, indent=2))
+    tmp = SETTINGS.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(current, indent=2))
+    tmp.replace(SETTINGS)   # one-step swap: stopping the app mid-save can't corrupt it
     try:
         SETTINGS.chmod(0o600)
     except OSError:

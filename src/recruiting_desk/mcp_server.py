@@ -1,6 +1,6 @@
 """
 Recruiting Desk -- a local MCP server that lets whichever AI assistant an athlete
-already uses read her own GameChanger data and help her write to college coaches.
+already uses read the athlete's own GameChanger data and help them write to college coaches.
 
 Runs on the family's machine. The token never leaves it. Every GameChanger tool
 is a GET. There is deliberately no tool that sends mail, and there will not be
@@ -26,6 +26,7 @@ except ModuleNotFoundError:                 # mcp 1.x
 
 from . import campaign
 from . import coach_finder
+from . import coach_import
 from . import profiles as profile_links
 from .gc_client import GameChangerClient, load_config, NotConfigured, AuthExpired
 
@@ -37,14 +38,14 @@ gc = GameChangerClient(BASE_URL, ENDPOINTS)
 
 DELIVERY_INSTRUCTIONS = {
     "draft_to_mailbox": (
-        "Use your mail connector to create this as a DRAFT in her own mailbox -- do not send it. "
-        "Tell her it is waiting, and that she should read it, change anything that does not sound "
-        "like her, and send it herself. A coach who can tell an adult or a script wrote the email "
-        "deletes it, and her own edit is what keeps it hers."
+        "Use your mail connector to create this as a DRAFT in the athlete's own mailbox -- do not send it. "
+        "Tell the athlete it is waiting, and that they should read it, change anything that does not "
+        "sound like them, and send it themselves. A coach who can tell an adult or a script wrote the "
+        "email deletes it, and the athlete's own edit is what keeps it theirs."
     ),
     "send": (
-        "She has set this campaign to send directly. Show her the full text and the recipient first, "
-        "wait for her to say yes to that specific email, then send it from her address with her "
+        "The athlete has set this campaign to send directly. Show them the full text and the recipient "
+        "first, wait for them to say yes to that specific email, then send it from their address with their "
         "parent copied. Never send a batch on one approval."
     ),
 }
@@ -72,7 +73,7 @@ def _wrap(fn, *args, **kwargs):
                 "what_to_do": "Ask the family to sign in again and replace the token. Do not guess at the data."}
     except PermissionError as e:
         return {"ok": False, "error": "premium_required", "message": str(e),
-                "what_to_do": "Ask the athlete for these figures directly and record the source she gives."}
+                "what_to_do": "Ask the athlete for these figures directly and record the source they give."}
     except NotConfigured as e:
         return {"ok": False, "error": "not_configured", "message": str(e),
                 "what_to_do": "Ask the athlete for this information directly. Do not infer it."}
@@ -174,10 +175,10 @@ def athlete_save(athlete_id: str, fields: dict) -> dict:
 
     delivery is how finished emails reach coaches, and the assistant's mail
     connector is what carries them out:
-      "draft_to_mailbox" (default) -- compose it as a draft in her own mailbox.
-                          She opens it, changes what does not sound like her,
+      "draft_to_mailbox" (default) -- compose it as a draft in the athlete's own mailbox.
+                          They open it, change what does not sound like them,
                           and presses send.
-      "send"           -- send it directly from her address on her say-so.
+      "send"           -- send it directly from their address on their say-so.
 
     writing_sample matters more than it looks: drafts are matched to it, and
     without one they read like an adult wrote them."""
@@ -188,7 +189,7 @@ def athlete_save(athlete_id: str, fields: dict) -> dict:
 
 @mcp.tool()
 def program_list(athlete_id: str) -> dict:
-    """Target programs for one athlete, with contact windows resolved against her class year."""
+    """Target programs for one athlete, with contact windows resolved against their class year."""
     a = campaign.athletes().get(athlete_id, {})
     out = []
     for p in campaign.programs_for(athlete_id):
@@ -249,6 +250,38 @@ def profile_link_inspect(url: str) -> dict:
 # ---------------------------------------------------------------- coach data
 
 @mcp.tool()
+def school_search(query: str) -> dict:
+    """Find NCAA schools by name, with division, conference, state and official athletics website.
+
+    Junior colleges and NAIA schools are not NCAA members and will not appear;
+    for those, pass the athletics site address to school_coaches directly."""
+    return coach_finder.search_schools(query)
+
+
+@mcp.tool()
+def school_coaches(site: str, sport: str = "softball") -> dict:
+    """Read the coaching staff for one sport from a school's athletics website.
+
+    Coaches and support staff (trainers, operations) are marked separately. A
+    coach with no published email is returned with the email blank -- never
+    guess one. Confirm each name on source_url before writing to them."""
+    return coach_finder.school_coaches(site, sport)
+
+
+@mcp.tool()
+def coach_list_import(path: str) -> dict:
+    """Preview a coach list from a CSV or Excel file on this computer.
+
+    Returns each row with what was recognized and any problems. Show the person
+    the preview and add only the rows they approve, with program_save."""
+    import pathlib
+    f = pathlib.Path(path).expanduser()
+    if not f.exists():
+        return {"ok": False, "error": f"No file at {f}."}
+    return coach_import.parse_coach_file(f.name, f.read_bytes())
+
+
+@mcp.tool()
 def coach_directory_read(url: str, sport: str = "") -> dict:
     """Read a college athletics staff directory and pull out the coaching staff.
 
@@ -279,7 +312,7 @@ def draft_brief(athlete_id: str, program_id: str) -> dict:
     """Everything needed to write one email, assembled and sourced.
 
     Call this before drafting. It returns the athlete's record, the program, the
-    contact window, her upcoming games, and the drafting rules. Write the email
+    contact window, their upcoming games, and the drafting rules. Write the email
     from what comes back and nothing else -- if a field is empty, leave that
     subject out rather than filling it with something plausible."""
     try:
@@ -321,7 +354,7 @@ def draft_brief(athlete_id: str, program_id: str) -> dict:
             "DELIVERY is set on the athlete record and repeated below. Follow it exactly.",
             "List back every factual claim you made and where each one came from, so the athlete can check them.",
         ],
-        "if_window_closed": ("She may still write; the coach may not answer until the date above. Say so plainly "
+        "if_window_closed": ("The athlete may still write; the coach may not answer until the date above. Say so plainly "
                              "rather than drafting as though the date does not exist."),
         "delivery": _delivery_instruction(a),
     }
@@ -331,7 +364,7 @@ def draft_brief(athlete_id: str, program_id: str) -> dict:
 def outreach_log_entry(program_id: str, action: str, date: str = "", note: str = "", subject: str = "") -> dict:
     """Record something that happened: action is one of drafted, sent, replied, no_reply, closed.
 
-    Log 'sent' only after the athlete tells you she sent it. This tool records
+    Log 'sent' only after the athlete tells you they sent it. This tool records
     history; it does not send anything."""
     if action not in ("drafted", "sent", "replied", "no_reply", "closed"):
         return {"ok": False, "error": "bad_action",
@@ -359,35 +392,38 @@ def recruiting_session(athlete_id: str = "") -> str:
 
 
 RECRUITING_INSTRUCTIONS = """\
-You are helping a high school softball or baseball player write to college coaches. Her data
+You are helping a high school softball or baseball player write to college coaches. Their data
 lives in a local GameChanger connection and a campaign folder on this machine.
 
 Athlete: {athlete_id}
 
+The athlete may play softball or baseball. Use the pronouns on their record
+(athlete_get returns them); if none are recorded, use their name.
+
 How to work:
 
-1. Start with athlete_get and program_list. Do not ask her for anything the
+1. Start with athlete_get and program_list. Do not ask them for anything the
    tools already know.
 2. Before drafting any email, call draft_brief. Write from what it returns and
    nothing else.
-3. Never state a number that did not come from her own data. If a stat is not
-   available -- no Premium, endpoint not configured, game not scored -- ask her
-   for it and record where she says it came from. An inflated figure a coach
+3. Never state a number that did not come from their own data. If a stat is not
+   available -- no Premium, endpoint not configured, game not scored -- ask them
+   for it and record where they say it came from. An inflated figure a coach
    checks is worse than no email at all, and it cannot be walked back.
 4. Respect the contact window. If it has not opened, say so and say what it
-   means: she may write, the coach may not answer yet.
-5. Write in her voice. Match the writing sample. If there is no sample, ask for
-   a few paragraphs she wrote herself before drafting anything.
-6. After each draft, list every factual claim and its source so she can check
+   means: they may write, the coach may not answer yet.
+5. Write in the athlete's voice. Match the writing sample. If there is no sample,
+   ask for a few paragraphs they wrote themselves before drafting anything.
+6. After each draft, list every factual claim and its source so they can check
    them.
-7. Deliver it the way her record says, using your own mail connector. The
-   default is a draft in her mailbox that she reads and sends herself; the
+7. Deliver it the way their record says, using your own mail connector. The
+   default is a draft in their mailbox that they read and send themselves; the
    brief tells you which mode is set and what it requires. Either way the mail
-   leaves from her address, not yours and not a parent's.
+   leaves from their address, not yours and not a parent's.
 8. Log it with outreach_log_entry once it has actually gone.
 
-Do one or two programs at a time. Fifty drafts she never reads is worse than
-five she actually sent.
+Do one or two programs at a time. Fifty drafts they never read is worse than
+five they actually sent.
 """
 
 

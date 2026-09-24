@@ -20,8 +20,10 @@ account to create, and no one else can see your player's information.
    stats — you choose which seasons go into emails, batting and pitching
    separately. No GameChanger sign-in needed. FieldLevel adds height, weight
    and hometown.
-2. **Add the coaches you want to write to.** It shows which ones NCAA rules let
-   reply yet, based on class year and division.
+2. **Add the coaches you want to write to.** Search for a school and pull its
+   coaching staff straight from the school's own athletics site, or import a
+   coach list you already keep in Excel or CSV. It shows which coaches NCAA
+   rules let reply yet, based on class year and division.
 3. **Pick the kind of email:**
    - **First email** — introduce the player to a coach who has never heard of them
    - **Coming up** — tell a coach where to find them at the next tournament

@@ -267,3 +267,250 @@ def find_directory(site, sport=""):
                   "message": "None of the usual staff-directory addresses worked on this site.",
                   "hint": "Find the directory in a browser and pass its address to find_coaches."},
     }
+
+
+# ==========================================================================
+# School search, from the NCAA's own member directory
+#
+# The NCAA publishes every member school with its division, conference,
+# location and -- the part that matters here -- its official athletics
+# website. That turns "type a school name" into "read that school's coaching
+# staff" without a search engine in the middle.
+#
+# Junior colleges and NAIA schools are not NCAA members and are not in it.
+# For those, the athletics site address can be pasted directly.
+# ==========================================================================
+
+import json
+import datetime
+
+from .paths import data_dir
+
+NCAA_DIRECTORY = "https://web3.ncaa.org/directory/api/directory/memberList?type=12"
+DIRECTORY_CACHE = "ncaa_members.json"
+DIRECTORY_MAX_AGE_DAYS = 30
+ROMAN = {"1": "I", "2": "II", "3": "III", 1: "I", 2: "II", 3: "III"}
+
+
+def _directory():
+    """The member list, cached on this computer and refreshed monthly."""
+    cache = data_dir() / DIRECTORY_CACHE
+    if cache.exists():
+        try:
+            saved = json.loads(cache.read_text())
+            age = datetime.datetime.now() - datetime.datetime.fromisoformat(saved["fetched"])
+            if age.days < DIRECTORY_MAX_AGE_DAYS:
+                return saved["schools"], None
+        except (ValueError, KeyError, json.JSONDecodeError):
+            pass
+    try:
+        r = httpx.get(NCAA_DIRECTORY, headers={"User-Agent": UA, "Accept": "application/json"},
+                      timeout=45.0, follow_redirects=True)
+        r.raise_for_status()
+        raw = r.json()
+    except (httpx.HTTPError, ValueError) as e:
+        if cache.exists():  # stale beats nothing
+            try:
+                return json.loads(cache.read_text())["schools"], None
+            except (ValueError, KeyError):
+                pass
+        return [], {"code": "unreachable", "message": f"Could not load the NCAA school directory: {e}"}
+    schools = []
+    for x in raw:
+        if str(x.get("deactive", "")).strip().upper() in ("Y", "YES", "TRUE", "1"):
+            continue  # the NCAA marks active schools "N" -- a string, so test the value, not truthiness
+        addr = x.get("memberOrgAddress") or {}
+        site = (x.get("athleticWebUrl") or "").strip()
+        schools.append({
+            "name": x.get("nameOfficial", ""),
+            "nickname": x.get("nickname") or "",
+            "acronym": x.get("acronym") or "",
+            "division": ROMAN.get(x.get("division"), str(x.get("division") or "")),
+            "conference": x.get("conferenceName") or "",
+            "city": addr.get("city") or "",
+            "state": addr.get("state") or "",
+            "athletics_url": _normalize_site(site),
+        })
+    tmp = cache.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"fetched": datetime.datetime.now().isoformat(), "schools": schools}))
+    tmp.replace(cache)
+    return schools, None
+
+
+def _normalize_site(site):
+    """'www.lynchburgsports.com/landing/index' -> 'https://www.lynchburgsports.com'."""
+    if not site:
+        return ""
+    if not site.lower().startswith(("http://", "https://")):
+        site = "https://" + site
+    parts = urllib.parse.urlsplit(site)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def search_schools(query, limit=12):
+    q = " ".join((query or "").lower().split())
+    if len(q) < 2:
+        return {"ok": False, "error": {"code": "too_short", "message": "Type at least two letters."}, "schools": []}
+    schools, err = _directory()
+    if err and not schools:
+        return {"ok": False, "error": err, "schools": []}
+    words = q.split()
+
+    def score(s):
+        hay = f"{s['name']} {s['nickname']} {s['acronym']} {s['city']}".lower()
+        if not all(w in hay for w in words):
+            return None
+        name = s["name"].lower()
+        if name == q:
+            return 0
+        if name.startswith(q):
+            return 1
+        if q in name:
+            return 2
+        return 3
+
+    hits = [(score(s), s) for s in schools]
+    hits = sorted((h for h in hits if h[0] is not None), key=lambda h: (h[0], h[1]["name"]))
+    return {
+        "ok": True,
+        "schools": [s for _, s in hits[:limit]],
+        "total": len(hits),
+        "note": ("Only NCAA schools are listed. For a junior college or NAIA school, "
+                 "paste its athletics website address instead."),
+    }
+
+
+# ==========================================================================
+# Reading a coaching staff page
+#
+# Most college athletics sites are built on Sidearm Sports, which puts each
+# coach in a <tr class="sidearm-coaches-coach"> row -- name, title, phone,
+# email -- and keeps trainers and support staff in a separate table. Reading
+# those rows exactly is far more reliable than guessing from page text, and it
+# never mistakes an athletic trainer who "covers softball" for a coach.
+# ==========================================================================
+
+class _SidearmRows(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.rows = []
+        self._row = None
+        self._cell = None
+        self._heading = None       # text of the h2/h3 being read
+        self._last_heading = ""
+        self._table = 0            # which staff table a row sits in
+        self._group = ""
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag in ("h2", "h3"):
+            self._heading = []
+        elif tag == "table":
+            self._table += 1
+            self._group = self._last_heading
+        elif tag == "tr" and "sidearm-coaches-coach" in (a.get("class") or ""):
+            self._row = {"cells": [], "emails": [], "profile": "", "table": self._table, "group": self._group}
+        elif self._row is not None and tag in ("th", "td"):
+            self._cell = []
+        elif self._row is not None and tag == "a":
+            href = a.get("href") or ""
+            if href.lower().startswith("mailto:"):
+                addr = html.unescape(href[7:].split("?")[0]).strip()
+                if EMAIL_RE.fullmatch(addr):
+                    self._row["emails"].append(addr)
+            elif "/coaches/" in href and not self._row["profile"]:
+                self._row["profile"] = href
+
+    def handle_endtag(self, tag):
+        if tag in ("h2", "h3") and self._heading is not None:
+            self._last_heading = " ".join(" ".join(self._heading).split())
+            self._heading = None
+        if self._row is not None and tag in ("th", "td") and self._cell is not None:
+            self._row["cells"].append(" ".join(" ".join(self._cell).split()))
+            self._cell = None
+        elif tag == "tr" and self._row is not None:
+            self.rows.append(self._row)
+            self._row = None
+
+    def handle_data(self, data):
+        if self._heading is not None:
+            self._heading.append(data)
+        if self._cell is not None:
+            self._cell.append(data)
+
+
+def sidearm_coaches(page_html, source_url):
+    p = _SidearmRows()
+    try:
+        p.feed(page_html)
+    except Exception:
+        return []
+    out = []
+    base = urllib.parse.urlsplit(source_url)
+    first_table = min((r["table"] for r in p.rows), default=0)
+    for row in p.rows:
+        cells = [c for c in row["cells"]]
+        name = cells[0] if cells else ""
+        title = cells[1] if len(cells) > 1 else ""
+        phone = ""
+        for c in cells[2:]:
+            m = PHONE_RE.search(c)
+            if m:
+                phone = m.group(0)
+                break
+        profile = row["profile"]
+        if profile and profile.startswith("/"):
+            profile = f"{base.scheme}://{base.netloc}{profile}"
+        out.append({
+            "name": name,
+            "title": title,
+            "email": row["emails"][0] if row["emails"] else "",
+            "phone": phone,
+            "profile_url": profile,
+            "source_url": source_url,
+            "needs_verification": True,
+            # Sidearm lists the coaching staff first; later tables are support
+            # staff -- trainers, operations, communications. Kept, but marked.
+            "support_staff": row["table"] != first_table or "support" in row["group"].lower(),
+            "group": row["group"],
+        })
+    return out
+
+
+def school_coaches(site, sport):
+    """Coaching staff for one sport at one school's athletics site."""
+    site = _normalize_site(site)
+    if not site:
+        return {"ok": False, "error": {"code": "no_site", "message": "No athletics website to read."}, "coaches": []}
+    sport = (sport or "softball").lower()
+    url = f"{site}/sports/{sport}/coaches"
+    page, err = fetch(url)
+    if page:
+        coaches = sidearm_coaches(page, url)
+        if coaches:
+            missing = [c["name"] for c in coaches if not c["email"] and not c["support_staff"]]
+            return {
+                "ok": True, "site": site, "source_url": url, "coaches": coaches, "layout": "sidearm",
+                "missing_email": missing,
+                "note": ("Read from the school's coaching staff page. Check each one on that page before writing."
+                         + (f" {len(missing)} coach{'es have' if len(missing) != 1 else ' has'} no email published "
+                            "there -- the school chose not to list it, so it is left blank rather than guessed."
+                            if missing else "")),
+            }
+    # Not a Sidearm site, or no coaches page: fall back to the general reader.
+    fallback = find_directory(site, sport)
+    coaches = [{
+        "name": c["name"], "title": c["title"], "email": c["email"], "phone": c["phone"],
+        "profile_url": "", "source_url": c["source_url"], "needs_verification": True,
+        "support_staff": False, "group": "",
+    } for c in fallback.get("contacts", []) if c.get("sport_match")]
+    if coaches:
+        return {"ok": True, "site": site, "source_url": fallback.get("source_url", ""), "coaches": coaches,
+                "layout": "general", "missing_email": [],
+                "note": ("This site uses an unusual layout, so names and titles may be off. "
+                         "Check every one against the page before adding.")}
+    return {"ok": False, "site": site, "coaches": [],
+            "error": {"code": "not_found",
+                      "message": f"Could not find a {sport} coaching staff page on {site}.",
+                      "hint": "Open the site in a browser, find the coaches page, and add them by hand -- "
+                              "or paste that page's address here."}}

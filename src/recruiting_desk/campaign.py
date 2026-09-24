@@ -14,6 +14,7 @@ import json
 import pathlib
 import datetime
 import os
+import threading
 
 from .paths import data_dir
 
@@ -28,6 +29,9 @@ def _load(name, default):
         return json.loads(p.read_text())
     except json.JSONDecodeError:
         raise RuntimeError(f"{p} is not valid JSON. Fix or remove it before continuing.")
+
+
+_lock = threading.RLock()
 
 
 def _save(name, data):
@@ -54,13 +58,14 @@ def athlete(athlete_id):
 
 
 def save_athlete(athlete_id, record):
-    data = athletes()
-    existing = data.get(athlete_id, {})
-    existing.update(record)
-    existing["id"] = athlete_id
-    data[athlete_id] = existing
-    _save("athletes.json", data)
-    return existing
+    with _lock:
+        data = athletes()
+        existing = data.get(athlete_id, {})
+        existing.update(record)
+        existing["id"] = athlete_id
+        data[athlete_id] = existing
+        _save("athletes.json", data)
+        return existing
 
 
 # -- target programs -----------------------------------------------------
@@ -70,13 +75,14 @@ def programs():
 
 
 def save_program(program_id, record):
-    data = programs()
-    existing = data.get(program_id, {})
-    existing.update(record)
-    existing["id"] = program_id
-    data[program_id] = existing
-    _save("programs.json", data)
-    return existing
+    with _lock:
+        data = programs()
+        existing = data.get(program_id, {})
+        existing.update(record)
+        existing["id"] = program_id
+        data[program_id] = existing
+        _save("programs.json", data)
+        return existing
 
 
 def programs_for(athlete_id):
@@ -90,11 +96,12 @@ def outreach():
 
 
 def log_outreach(entry):
-    log = outreach()
-    entry["logged_at"] = datetime.datetime.now().isoformat(timespec="seconds")
-    log.append(entry)
-    _save("outreach.json", log)
-    return entry
+    with _lock:
+        log = outreach()
+        entry["logged_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+        log.append(entry)
+        _save("outreach.json", log)
+        return entry
 
 
 def history_for(program_id):

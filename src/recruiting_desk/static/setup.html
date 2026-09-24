@@ -40,7 +40,7 @@
 
   <div class="card">
     <h3>Which assistant writes the drafts</h3>
-    <div class="lede">Any of these works. The difference that matters is where her information goes.</div>
+    <div class="lede">Any of these works. The difference that matters is where the player’s information goes.</div>
     <label>Assistant</label>
     <select id="prov"></select>
     <div id="privacy" class="note"></div>
@@ -91,9 +91,9 @@ function paint(){
   el("key").placeholder = S.has_key ? "saved — leave blank to keep it" : "";
   el("privacy").className = "note " + (p.data_leaves_machine ? "warn" : "good");
   el("privacy").innerHTML = p.data_leaves_machine
-    ? "Her name, school, stats and where she is playing next are sent to " + p.label +
-      " each time a draft is written. That is how every cloud assistant works; it is worth knowing about a sixteen-year-old rather than discovering later."
-    : "Nothing leaves this computer. Drafts are written by a model running here, so her information never reaches anyone else's servers.";
+    ? "The player’s name, school, stats and where they are playing next are sent to " + p.label +
+      " each time a draft is written. That is how every cloud assistant works; with a teenager’s details, it is worth knowing now rather than discovering later."
+    : "Nothing leaves this computer. Drafts are written by a model running here, so the player’s information never reaches anyone else's servers.";
 
 }
 
