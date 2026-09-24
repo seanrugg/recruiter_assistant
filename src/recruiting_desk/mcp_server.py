@@ -27,6 +27,7 @@ except ModuleNotFoundError:                 # mcp 1.x
 from . import campaign
 from . import coach_finder
 from . import coach_import
+from . import compose as composer
 from . import profiles as profile_links
 from .gc_client import GameChangerClient, load_config, NotConfigured, AuthExpired
 
@@ -341,7 +342,14 @@ def draft_brief(athlete_id: str, program_id: str) -> dict:
         "prior_contact": campaign.history_for(program_id),
         "sport": a.get("sport", "softball"),
         "pronouns": a.get("pronouns", ""),
+        # Built by the app from the record. Paste these verbatim; write only the
+        # opening, the reason for the school, and the ask around them.
+        "ready_blocks": {k: v for k, v in composer.facts(a, p).items()
+                         if k in ("greeting", "stats", "links", "schedule", "signature", "window_note")},
         "rules_for_drafting": [
+            "Use the ready_blocks exactly as given for the greeting, statistics, links, schedule and signature. "
+            "Write only the opening, a reason for the school built from facts in this brief, and the ask. "
+            "Those sentences must contain no numbers at all.",
             "Use only facts present in this brief. Invent nothing.",
             "Use the athlete's own pronouns, given above. If none are recorded, use their name and "
             "avoid pronouns entirely rather than assuming.",

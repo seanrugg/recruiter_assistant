@@ -192,6 +192,17 @@
   /* ---------- views ---------- */
   var VIEW="home";
 
+  /* A save comes back through the background refresh a moment later. That echo
+     is identical to what is already on screen, and redrawing for it destroyed
+     whichever field had just been clicked -- so the first click never took.
+     Compare before redrawing. */
+  function sameDocs(x,y){
+    var kx=Object.keys(x||{}).sort(), ky=Object.keys(y||{}).sort();
+    if(kx.join("|")!==ky.join("|")) return false;
+    for(var i=0;i<kx.length;i++){ if(JSON.stringify(x[kx[i]])!==JSON.stringify(y[kx[i]])) return false; }
+    return true;
+  }
+
   /* Background data refreshes redraw the page. Anything half-typed into an
      unsaved box -- a search, a link, a new coach's details -- must survive
      that, along with which box has focus. User actions call render() directly
@@ -474,7 +485,7 @@
     var a=A(), host=el("view-player");
     if(migrateReference(a)) putAthlete(a);
     if(!a){ host.innerHTML='<div class="empty">Add an athlete on the first tab.</div>'; return; }
-    function f(k,l,ph){ return '<div class="grow"><label>'+esc(l)+'</label><input data-f="'+k+'" value="'+esc(a[k]||"")+'" placeholder="'+esc(ph||"")+'"></div>'; }
+    function f(k,l,ph){ return '<div class="grow"><label for="f-'+k+'">'+esc(l)+'</label><input id="f-'+k+'" data-f="'+k+'" value="'+esc(a[k]||"")+'" placeholder="'+esc(ph||"")+'"></div>'; }
     var stats=(a.stats||[]).map(function(s,i){
       return '<div class="stat-line"><b>'+esc(s.label)+'</b><span>'+esc(s.value)+'</span><span class="src">'+esc(s.source||"no source")+'</span>'+
              '<button class="btn quiet" data-ds="'+i+'">Remove</button></div>';}).join("")
@@ -517,7 +528,7 @@
         '</div><button class="btn" id="e-add" style="margin-top:8px">Add</button></div>'+
       '<div class="card"><h3>How they write</h3>'+
         '<div class="lede">Paste a few paragraphs the player wrote — a school essay, a long message, anything nobody edited. Emails get matched to this. Without it they sound like an adult, which is the fastest way to get deleted.</div>'+
-        '<textarea data-f="voice" rows="7">'+esc(a.voice||"")+'</textarea></div>';
+        '<textarea id="f-voice" data-f="voice" rows="7">'+esc(a.voice||"")+'</textarea></div>';
 
     wirePicker();
     wirePaste(a, host);
@@ -837,36 +848,62 @@
     var t=S.targets[S.tid], g=gate(t);
     var hist=t.log||[];
     var hasSent=hist.some(function(h){return h.action==="sent";});
-    var hasEvents=(a.events||[]).length>0;
+    var events=a.events||[];
+    if(!S.templates && !S.tplLoading){
+      S.tplLoading=true;
+      fetch("/api/templates").then(function(r){ return r.json(); })
+        .then(function(d){ S.templates=d; S.tplLoading=false; render(); })
+        .catch(function(){ S.tplLoading=false; S.templates={}; render(); });
+    }
+    var tpl=(S.templates||{})[S.kind];
 
     function why(kind){
-      if(kind==="coming"&&!hasEvents) return "Needs a tournament on the calendar.";
+      if(kind==="coming"&&!events.length) return "Needs a game or tournament on the Player tab.";
       if(kind==="follow"&&!hasSent) return "Nothing sent to this coach yet.";
       if(kind==="thanks"&&!t.watched) return "Mark that this coach came to watch, below.";
       return "";
     }
+    var needsEvent=(S.kind==="coming"||S.kind==="thanks")&&events.length;
+    if(S.eventIdx==null||S.eventIdx>=events.length) S.eventIdx=0;
+    var D=S.draft||{};
 
     host.innerHTML = picker()+
       '<div class="row"><div class="grow"><label>Coach</label><select id="tpick">'+
-        list.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===t.id?' selected':'')+'>'+esc(x.school)+' — '+esc(x.coachName||"no coach")+'</option>';}).join("")+
+        list.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===t.id?' selected':'')+'>'+esc(x.school)+' \u2014 '+esc(x.coachName||"no coach")+'</option>';}).join("")+
       '</select></div></div>'+
       (!g.open? '<div class="banner stop"><b>'+(g.unknown?'Class year is missing.':'Held.')+'</b> '+
         (g.unknown?'Add it on the Player tab and this will resolve.':
           esc(g.rule.label)+' coaches may not reply to the class of '+esc(a.gradYear)+' until <b>'+esc(fmt(g.date))+'</b>. '+
-          'The player may write today; the coach cannot answer until then, and the email should say so rather than pretend otherwise.')+'</div>' : "")+
+          'The player may write today, and the email says so honestly.')+'</div>' : "")+
       '<div class="card"><h3>What kind of email</h3>'+
         '<div class="kinds">'+KINDS.map(function(K){
           var block=why(K.k);
           return '<button class="kind" data-k="'+K.k+'" aria-pressed="'+(S.kind===K.k)+'"'+(block?' disabled title="'+esc(block)+'"':'')+'>'+
             '<b>'+esc(K.t)+'</b><span>'+esc(block||K.d)+'</span></button>';
         }).join("")+'</div>'+
+        (needsEvent?'<label style="margin-top:12px">Which game or tournament</label><select id="ev-pick">'+
+          events.map(function(e,i){ return '<option value="'+i+'"'+(i===S.eventIdx?' selected':'')+'>'+esc([e.date,e.name].filter(Boolean).join(" \u2013 "))+'</option>'; }).join("")+'</select>':'')+
         '<label style="margin-top:12px"><input type="checkbox" id="watched" '+(t.watched?'checked':'')+' style="width:auto;margin-right:8px">This coach came and watched them play</label>'+
-        '<div class="row" style="margin-top:12px"><button class="btn" id="gen">Write it</button>'+
+        '<div class="row" style="margin-top:12px"><button class="btn" id="gen"'+(S.busy?' disabled':'')+'>'+(S.busy?'Writing\u2026':'Write it')+'</button>'+
+        '<button class="btn ghost" id="showprompt">Show the prompt</button>'+
         '<span class="muted" id="state"></span></div>'+
+        '<details id="tpl"'+(S.tplOpen?' open':'')+' style="margin-top:14px"><summary style="cursor:pointer;font-weight:600;font-size:14px">Template for \u201c'+esc((tpl&&tpl.label)||"")+'\u201d'+(tpl&&!tpl.is_default?' <span class="pill">edited</span>':'')+'</summary>'+
+          (tpl?'<div class="muted" style="margin:8px 0">Words in {curly braces} are filled in by the app from the player\u2019s record \u2014 every fact, link and number. '+
+            'Each [[name | instruction]] is a sentence the assistant writes, following the instruction. The assistant never sees or writes a number.</div>'+
+            '<label>Subject</label><input id="tpl-subj" value="'+esc(tpl.subject)+'">'+
+            '<label>Body</label><textarea id="tpl-body" rows="16" style="font-family:ui-monospace,Consolas,monospace;font-size:13px">'+esc(tpl.body)+'</textarea>'+
+            '<div class="row" style="margin-top:8px"><button class="btn ghost" id="tpl-save">Save template</button>'+
+            '<button class="btn quiet" id="tpl-reset"'+(tpl.is_default?' disabled':'')+'>Reset to the original</button></div>'
+            :'<div class="muted">Loading\u2026</div>')+
+        '</details>'+
+        (S.promptText?'<details open style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:14px">The exact prompt sent to the assistant</summary>'+
+          '<pre style="white-space:pre-wrap;font-size:12.5px;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:420px;overflow:auto">'+esc(S.promptText)+'</pre></details>':'')+
       '</div>'+
+      (D.notes&&D.notes.length?'<div class="banner">'+D.notes.map(esc).join("<br>")+'</div>':'')+
       '<div class="card"><h3>The email</h3>'+
-        '<label>Subject</label><input id="d-subj" value="'+esc(S.draft.subject||"")+'">'+
-        '<label>Message</label><textarea id="d-body" class="draftbox" placeholder="Nothing written yet.">'+esc(S.draft.body||"")+'</textarea>'+
+        '<label>To</label><input id="d-to" value="'+esc(t.coachEmail||"")+'" readonly>'+
+        '<label>Subject</label><input id="d-subj" value="'+esc(D.subject||"")+'">'+
+        '<label>Message</label><textarea id="d-body" class="draftbox" placeholder="Nothing written yet.">'+esc(D.body||"")+'</textarea>'+
         '<div class="row" style="margin-top:10px">'+
           '<button class="btn" id="open">Open in email</button>'+
           '<button class="btn ghost" id="copy">Copy</button>'+
@@ -874,14 +911,57 @@
         '</div>'+
         '<div class="muted" style="margin-top:8px">It opens in whatever email app the player is signed into, addressed and filled in. They read it, fix anything that does not sound like them, and press send.</div>'+
       '</div>'+
-      (S.draft.facts&&S.draft.facts.length? '<div class="card"><h3>Check these before sending</h3><ul class="facts">'+
-        S.draft.facts.map(function(f){return '<li>'+esc(f)+'</li>';}).join("")+'</ul></div>':"");
+      (D.slots? '<div class="card"><h3>Check before sending</h3>'+
+        '<div class="muted" style="margin-bottom:6px">Every number, link and date below came from the player\u2019s record, not from the assistant.</div>'+
+        (D.facts&&D.facts.length?'<ul class="facts">'+D.facts.map(function(f){return '<li>'+esc(f)+'</li>';}).join("")+'</ul>':'')+
+        '<div class="muted" style="margin-top:8px">'+Object.keys(D.slots).map(function(k){
+          var sl=D.slots[k]; return '<b>'+esc(k.replace(/_/g," "))+'</b>: '+(!sl.text?'left out \u2014 nothing true to say':(sl.source==="assistant"?'written by '+esc(D.provider||'the assistant'):'standard sentence'));
+        }).join(" \u00b7 ")+'</div></div>':"");
 
     wirePicker();
-    el("tpick").onchange=function(){ S.tid=el("tpick").value; S.draft={subject:"",body:"",facts:[]}; render(); };
-    Array.prototype.forEach.call(host.querySelectorAll("[data-k]"),function(b){ b.onclick=function(){ S.kind=b.getAttribute("data-k"); render(); }; });
+    el("tpick").onchange=function(){ S.tid=el("tpick").value; S.draft={}; S.promptText=""; render(); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-k]"),function(b){ b.onclick=function(){ S.kind=b.getAttribute("data-k"); S.promptText=""; render(); }; });
+    if(el("ev-pick")) el("ev-pick").onchange=function(){ S.eventIdx=+el("ev-pick").value; };
     el("watched").onchange=function(){ t.watched=el("watched").checked; putTarget(t); render(); };
-    el("gen").onclick=function(){ writeEmail(a,t); };
+    el("tpl").ontoggle=function(){ S.tplOpen=el("tpl").open; };
+
+    function currentTemplate(){
+      var s=el("tpl-subj"), b=el("tpl-body");
+      return (s&&b)?{subject:s.value, body:b.value, label:(tpl&&tpl.label)||""}:null;
+    }
+    function request(preview){
+      var ev=needsEvent?events[S.eventIdx]:null;
+      return {kind:S.kind, athlete:a, target:t, event:ev, template:currentTemplate(), preview:!!preview};
+    }
+    el("gen").onclick=function(){
+      if(S.busy) return;
+      S.busy=true; render();
+      fetch("/api/compose",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(request(false))})
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          S.busy=false;
+          if(!d.ok){ S.draft={notes:[d.message||"Couldn\u2019t write that email."]}; render(); return; }
+          S.draft={subject:d.subject, body:d.body, facts:d.facts, notes:d.notes, slots:d.slots, provider:d.provider};
+          if(d.prompt) S.promptText=d.prompt;
+          t.log=t.log||[]; t.log.push({kind:S.kind,action:"drafted",date:todayISO(),subject:d.subject});
+          putTarget(t); render();
+        })
+        .catch(function(){ S.busy=false; S.draft={notes:["Writing emails only works in the installed app."]}; render(); });
+    };
+    el("showprompt").onclick=function(){
+      fetch("/api/compose",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(request(true))})
+        .then(function(r){ return r.json(); }).then(function(d){ S.promptText=d.prompt||d.message||""; render(); })
+        .catch(function(){ S.promptText="The prompt can only be shown in the installed app."; render(); });
+    };
+    if(el("tpl-save")) el("tpl-save").onclick=function(){
+      var c=currentTemplate();
+      fetch("/api/templates/"+S.kind,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({subject:c.subject,body:c.body})})
+        .then(function(r){ return r.json(); }).then(function(d){ S.templates[S.kind]=d; S.tplOpen=true; render(); });
+    };
+    if(el("tpl-reset")) el("tpl-reset").onclick=function(){
+      fetch("/api/templates/"+S.kind,{method:"DELETE"})
+        .then(function(r){ return r.json(); }).then(function(d){ S.templates[S.kind]=d; S.tplOpen=true; render(); });
+    };
     el("copy").onclick=function(){ if(navigator.clipboard) navigator.clipboard.writeText(el("d-body").value).then(function(){
       el("copy").textContent="Copied"; setTimeout(function(){el("copy").textContent="Copy";},1400); }); };
     el("open").onclick=function(){
@@ -889,78 +969,10 @@
     };
     el("sent").onclick=function(){
       t.log=t.log||[]; t.log.push({kind:S.kind,action:"sent",date:todayISO(),subject:el("d-subj").value});
-      putTarget(t); S.draft={subject:"",body:"",facts:[]}; switchView("sent");
+      putTarget(t); S.draft={}; S.promptText=""; switchView("sent");
     };
     el("d-subj").oninput=function(){ S.draft.subject=el("d-subj").value; };
     el("d-body").oninput=function(){ S.draft.body=el("d-body").value; };
-  }
-
-  function kindBrief(kind, a, t){
-    var hist=(t.log||[]).filter(function(h){return h.action==="sent";});
-    var lastSent=hist.length?hist[hist.length-1]:null;
-    if(kind==="intro") return "PURPOSE: first contact. The coach has never heard of this athlete. Say who they are and their class year, why this program specifically, two or three stats that matter for their position, where to watch them play on video, when and where they can be seen next, and one clear ask.";
-    if(kind==="coming") return "PURPOSE: the athlete is playing somewhere the coach could come and watch. Lead with the tournament, the field and the time, and the jersey number so they can be picked out of a roster. Keep the stats to one or two. The ask is that the coach comes, or says what they would want to see.";
-    if(kind==="follow") return "PURPOSE: a follow-up. The athlete wrote on "+(lastSent?lastSent.date:"an earlier date")+" and has had no answer. Do not repeat the first email. Lead with what has actually changed since — a new number from the stat line, a new tournament. Short. One ask. Do not sound aggrieved or apologetic about the silence.";
-    if(kind==="thanks") return "PURPOSE: the coach came and watched them play. Thank them specifically and briefly. Reference the event by name if it is on the calendar. Do not re-pitch the whole resume; one honest line about how it went is enough, including if it went badly. The ask is small or absent.";
-    return "";
-  }
-
-  function writeEmail(a,t){
-    var st=el("state");
-    if(!S.sample){ st.textContent="Writing isn't available in this view."; return; }
-    if(S.busy) return;
-    S.busy=true; el("gen").disabled=true; st.textContent="Writing…";
-    var g=gate(t);
-    var links=(a.links||[]).filter(function(l){return l.include!==false;}).map(function(l){return l.label+": "+l.url;}).join("\n")||"none";
-    var socials=(a.socials||[]).filter(function(s){return s.include;}).map(function(s){return s.platform+": "+s.handle;}).join("\n")||"none";
-    var stats=(a.stats||[]).map(function(s){return "- "+s.label+": "+s.value+" (source: "+(s.source||"unspecified")+")";}).join("\n")||"- none provided";
-    var events=(a.events||[]).map(function(e){return "- "+e.date+", "+e.name+(e.location?", "+e.location:"");}).join("\n")||"- none provided";
-
-    var pron=(a.pronouns||""), sport=(a.sport||"softball");
-    var prompt=[
-      "Write one recruiting email from a high school "+sport+" player to a college coach. The athlete reads it, edits it, and sends it personally.",
-      (pron? "The athlete"+String.fromCharCode(39)+"s pronouns are "+pron+". Use those and no others."
-         : "No pronouns are recorded. Use the athlete"+String.fromCharCode(39)+"s name and avoid pronouns entirely rather than assuming any."),
-      "", kindBrief(S.kind,a,t), "",
-      "HARD RULES:",
-      "1. Use only what is below. Invent nothing. No number that is not in THEIR STATS, and never rounded up or projected.",
-      "2. If something is missing, leave that subject out rather than filling it with something plausible.",
-      "3. The voice of the athlete, matched to the writing sample. A teenager wrote this.",
-      "4. Under 180 words. No bullet lists. No flattery. Never open with 'I am reaching out' or 'I hope this finds you well'.",
-      "5. End with a signature block: the athlete's name, class year, email and phone; then \"NCAA Eligibility Center ID:\" and the number, if one is given; then a reference line for the reference coach with their name, email and phone, if given. Nothing else in the signature.",
-      g.open?"":"6. Coaches at this division may not reply to this graduating class until "+fmt(g.date)+". Acknowledge that in one short, unbothered sentence rather than writing as though it does not exist.",
-      "",
-      "THE ATHLETE","Name: "+(a.name||""),"Class of: "+(a.gradYear||""),"High school: "+(a.school||""),"Club: "+(a.club||""),
-      "Positions: "+(a.positions||""),"Jersey: "+(a.jersey||""),
-      "Height: "+(a.height||"")+"  Weight: "+(a.weight||""),"Hometown: "+(a.hometown||""),"GPA: "+(a.gpa||"")+"  Tests: "+(a.tests||""),
-      "Wants to study: "+(a.major||""),"Email: "+(a.email||"")+"  Phone: "+(a.phone||""),
-      "NCAA Eligibility Center ID: "+(a.ncaaId||""),
-      "Reference coach: "+[a.refName,a.refEmail,a.refPhone].filter(Boolean).join(", "),
-      "","WHERE COACHES CAN WATCH THEM PLAY",links,
-      "","SOCIAL ACCOUNTS THE ATHLETE CHOSE TO SHARE",socials,
-      "","THEIR STATS (the only numbers allowed)",stats,
-      "","THEIR SCHEDULE",events,
-      "","THE PROGRAM","School: "+t.school,"Division: "+t.division,"Location: "+(t.location||""),
-      "Coach: "+(t.coachName||""),"Why this school: "+(t.fit||"not given — write around it, do not invent a reason"),
-      "Came to watch them play: "+(t.watched?"yes":"no"),
-      "","EARLIER EMAILS TO THIS COACH",
-      ((t.log||[]).map(function(h){return "- "+h.date+": "+h.kind+" — "+(h.subject||"");}).join("\n")||"none"),
-      "","WRITING SAMPLE BY THE ATHLETE (match this)",(a.voice||"(none given — write plainly, short sentences, no adult polish)"),
-      "",
-      'Reply with only JSON: {"subject":"...","body":"...","facts":["every factual claim in the body, each naming where it came from"]}'
-    ].join("\n");
-
-    S.sample.json(prompt,{modelTier:"default"}).then(function(o){
-      S.draft={subject:String(o.subject||""),body:String(o.body||""),facts:Array.isArray(o.facts)?o.facts.map(String):[]};
-      t.log=t.log||[]; t.log.push({kind:S.kind,action:"drafted",date:todayISO(),subject:S.draft.subject});
-      putTarget(t); S.busy=false; render();
-    }).catch(function(e){
-      S.busy=false; el("gen").disabled=false;
-      st.textContent = e&&e.code==="not_granted" ? "Writing needs your permission — reload and allow it."
-        : e&&e.code==="rate_limited" ? "Too many at once. Wait a minute."
-        : e&&e.code==="invalid_json" ? "That came back garbled. Try again."
-        : "Something went wrong.";
-    });
   }
 
   /* --- Sent --- */
@@ -1028,8 +1040,8 @@
       var db=await claude.use("db");
       if(db){
         S.db=db;
-        db.collection("athletes").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); S.athletes=n; softRender(); },function(){});
-        db.collection("targets").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); S.targets=n; softRender(); },function(){});
+        db.collection("athletes").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); if(sameDocs(n,S.athletes)) return; S.athletes=n; softRender(); },function(){});
+        db.collection("targets").onSnapshot(function(s){ var n={}; s.docs.forEach(function(d){ var v=clone(d.data()); v.id=v.id||d.id; n[v.id]=v; }); if(sameDocs(n,S.targets)) return; S.targets=n; softRender(); },function(){});
         db.doc("config/rules").onSnapshot(function(s){ S.rules = s.exists? clone(s.data()) : defaultRules(); softRender(); },function(){});
       } else { if(!S.rules) S.rules=defaultRules(); render(); }
     }catch(e){}

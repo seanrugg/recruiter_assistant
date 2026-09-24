@@ -29,6 +29,7 @@ from . import llm
 from . import campaign
 from . import coach_finder
 from . import coach_import
+from . import compose
 from . import profiles as profile_links
 from .gc_client import GameChangerClient, load_config, NotConfigured, AuthExpired, TOKEN_FILE, CONFIG_DIR
 
@@ -240,6 +241,48 @@ def profile_inspect(url: str):
 
 
 # ---------------------------------------------------------------- coach data
+
+class ComposeRequest(BaseModel):
+    kind: str
+    athlete: dict
+    target: dict
+    event: dict | None = None
+    coaches: list[str] | None = None
+    template: dict | None = None     # an unsaved edit, to try before saving
+    preview: bool = False            # True: return the prompt only, don't call the model
+
+
+@app.post("/api/compose")
+def compose_email(body: ComposeRequest):
+    try:
+        if body.preview:
+            return {"ok": True, "prompt": compose.prompt_preview(
+                body.kind, body.athlete, body.target, body.event, body.coaches, body.template)}
+        return {"ok": True, **compose.compose(
+            body.kind, body.athlete, body.target, body.event, body.coaches, body.template)}
+    except KeyError as e:
+        return JSONResponse(status_code=404, content={"ok": False, "message": str(e)})
+
+
+@app.get("/api/templates")
+def templates_get():
+    return compose.load_templates()
+
+
+class TemplateBody(BaseModel):
+    subject: str
+    body: str
+
+
+@app.put("/api/templates/{kind}")
+def templates_put(kind: str, body: TemplateBody):
+    return compose.save_template(kind, body.subject, body.body)
+
+
+@app.delete("/api/templates/{kind}")
+def templates_reset(kind: str):
+    return compose.reset_template(kind)
+
 
 @app.get("/api/schools/search")
 def schools_search(q: str):

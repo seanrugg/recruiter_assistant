@@ -16,6 +16,7 @@ API keys live in the app's data folder settings.json on this machine, mode 600.
 
 import os
 import json
+import re
 import pathlib
 
 import httpx
@@ -217,7 +218,9 @@ def complete_json(prompt, **kwargs):
 
 
 def parse_json(text):
-    raw = (text or "").strip()
+    # Reasoning models (Qwen3, DeepSeek-R1 and others) may put their thinking in
+    # <think>...</think> before the answer. It is never part of the answer.
+    raw = re.sub(r"<think>.*?</think>", "", text or "", flags=re.S).strip()
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
