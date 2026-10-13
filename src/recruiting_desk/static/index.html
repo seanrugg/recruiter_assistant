@@ -136,6 +136,9 @@
   var S = {athletes:{}, targets:{}, rules:null, aid:null, tid:null, kind:"intro",
            db:null, sample:null, downloads:null, draft:{subject:"",body:"",facts:[]}, busy:false};
   var LS = "recruiting-desk-v2";
+  // The last draft (and a short history) for each program, kept so a draft is
+  // never lost to a tab close, a refresh, or switching away from a coach.
+  var DRAFT_KEY = "recruiting-desk-drafts-v1";
 
   function uid(){ return (window.crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0,12) : "x"+Math.random().toString(36).slice(2,10); }
   function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];}); }
@@ -144,6 +147,42 @@
 
   function saveLocal(){ try{ localStorage.setItem(LS, JSON.stringify({athletes:S.athletes,targets:S.targets,rules:S.rules})); }catch(e){} }
   function loadLocal(){ try{ var d=JSON.parse(localStorage.getItem(LS)||"null"); if(d){S.athletes=d.athletes||{};S.targets=d.targets||{};S.rules=d.rules||null;} }catch(e){} }
+
+  // ---- draft persistence -------------------------------------------------
+  // The last draft for each coach is kept in localStorage, along with a short
+  // history of the previous few. So a draft is never lost to a tab close, a
+  // refresh, or switching away from a coach: it is offered again on return.
+
+  function loadDrafts(){
+    try{ return JSON.parse(localStorage.getItem(DRAFT_KEY)||"{}"); }catch(e){ return {}; }
+  }
+  function saveDraftsToLS(d){ try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); }catch(e){} }
+
+  function recordDraft(id, draft){
+    if(!id || !draft) return;
+    var drafts = loadDrafts();
+    drafts[id] = drafts[id] || {current:null, history:[]};
+    if(!draft.subject && !draft.body) return;   // don't save blanks
+    var entry={subject:draft.subject||"", body:draft.body||"",
+      date:todayISO(), kind:S.kind, provider:draft.provider||""};
+    drafts[id].current=entry;
+    drafts[id].history.unshift(entry);
+    // Remove the just-added copy if it is the same as the one before it (we only
+    // want a new history entry when the draft actually changed).
+    if(drafts[id].history.length>1 &&
+       drafts[id].history[0].subject===drafts[id].history[1].subject &&
+       drafts[id].history[0].body===drafts[id].history[1].body){
+      drafts[id].history.splice(1,1);
+    }
+    if(drafts[id].history.length>8) drafts[id].history.length=8;   // keep the last few
+    saveDraftsToLS(drafts);
+  }
+
+  function currentDraft(id){
+    var drafts=loadDrafts();
+    if(drafts[id] && drafts[id].current) return drafts[id].current;
+    return null;
+  }
 
   function putAthlete(r){ S.athletes[r.id]=r; if(S.db) S.db.doc("athletes/"+r.id).set(r).catch(fail); else saveLocal(); }
   function putTarget(r){ S.targets[r.id]=r; if(S.db) S.db.doc("targets/"+r.id).set(r).catch(fail); else saveLocal(); }
@@ -690,7 +729,18 @@
     var a=A(), host=el("view-coaches");
     if(!a){ host.innerHTML='<div class="empty">Add an athlete first.</div>'; return; }
     var list=targetsFor(a.id);
-    var rows=list.map(function(t){
+    // Coach search/filter.
+    var filter=(CS.filter||"").toLowerCase().trim();
+    var visible=list;
+    if(filter){
+      visible=list.filter(function(t){
+        return (t.school||"").toLowerCase().indexOf(filter)!==-1 ||
+               (t.coachName||"").toLowerCase().indexOf(filter)!==-1 ||
+               (t.coachEmail||"").toLowerCase().indexOf(filter)!==-1 ||
+               (t.division||"").toLowerCase().indexOf(filter)!==-1;
+      });
+    }
+    var rows=visible.map(function(t){
       var g=gate(t);
       var pill=g.open?'<span class="pill live">Can write now</span>'
         :(g.unknown?'<span class="pill wait">Needs a class year</span>'
@@ -706,7 +756,16 @@
         '<div style="display:flex;flex-direction:column;gap:6px">'+
         '<button class="btn" data-w="'+esc(t.id)+'">Write</button>'+
         '<button class="btn quiet" data-x="'+esc(t.id)+'">Remove</button></div></div>';
-    }).join("") || '<div class="empty">No coaches yet. Find a school or import a list above.</div>';
+    }).join("");
+    // Coach search/filter.
+    var filterEl='<div class="row" style="margin-bottom:10px">'+
+      '<div class="grow"><input id="coach-filter" placeholder="Filter coaches by school, name, email, or division" value="'+esc(filter)+'"></div>'+
+      '<button class="btn ghost" id="coach-clear" style="display:'+(filter?'inline-block':'none')+'">Clear</button>'+
+      '</div>';
+    var shown=visible.length;
+    var countMsg=filter?
+      (shown+' of '+list.length+' coach'+(list.length===1?'':'es')+' match "'+esc(filter)+'"') :
+      (list.length?list.length+' coach'+(list.length===1?'':'es')+' on the list':'The list');
 
     var modes=[["find","Find a school"],["import","Import a list"],["manual","Type one in"]];
     host.innerHTML = picker()+
@@ -714,7 +773,8 @@
       '<div class="row" style="gap:6px;margin:6px 0 12px">'+modes.map(function(m){
         return '<button class="btn'+(CS.mode===m[0]?'':' ghost')+'" data-mode="'+m[0]+'">'+m[1]+'</button>'; }).join("")+'</div>'+
       (CS.mode==="find"?findBody(a):CS.mode==="import"?importBody(a):manualBody())+'</div>'+
-      '<h3 style="margin:18px 0 4px;font-size:15px">'+(list.length?list.length+' coach'+(list.length===1?'':'es')+' on the list':'The list')+'</h3>'+
+      '<h3 style="margin:18px 0 4px;font-size:15px">'+countMsg+'</h3>'+
+      filterEl+
       rows;
 
     wirePicker();
@@ -814,7 +874,30 @@
     }
 
     Array.prototype.forEach.call(host.querySelectorAll("[data-w]"),function(b){ b.onclick=function(){ S.tid=b.getAttribute("data-w"); switchView("write"); }; });
-    Array.prototype.forEach.call(host.querySelectorAll("[data-x]"),function(b){ b.onclick=function(){ dropTarget(b.getAttribute("data-x")); render(); }; });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-x]"),function(b){ b.onclick=function(){
+      var id=b.getAttribute("data-x");
+      if(!confirm("Remove this coach from the list? You can add them again later.")) return;
+      dropTarget(id);
+    }; });
+
+    // Coach filter: update as the user types. Use a local variable so the
+    // input keeps focus while typing (no re-render of the field itself).
+    var filterInput=el("coach-filter");
+    if(filterInput){
+      filterInput.addEventListener("input",function(){
+        CS.filter=filterInput.value;
+        renderCoaches();
+        // Restore focus so the user never loses their place while typing.
+        var after=el("coach-filter");
+        if(after) after.focus();
+      });
+    }
+    if(el("coach-clear")) el("coach-clear").onclick=function(){
+      CS.filter="";
+      renderCoaches();
+      var after=el("coach-filter");
+      if(after) after.focus();
+    };
   }
 
   function showCoaches(a, school){
@@ -856,16 +939,27 @@
         .catch(function(){ S.tplLoading=false; S.templates={}; render(); });
     }
     var tpl=(S.templates||{})[S.kind];
+    // If the user was editing a draft and left it, offer the last one back.
+    if(!S.draft){
+      var saved=currentDraft(S.tid);
+      if(saved){ S.draft={subject:saved.subject, body:saved.body, provider:saved.provider||""}; }
+    }
+    D=S.draft||{};
 
-    function why(kind){
-      if(kind==="coming"&&!events.length) return "Needs a game or tournament on the Player tab.";
-      if(kind==="follow"&&!hasSent) return "Nothing sent to this coach yet.";
-      if(kind==="thanks"&&!t.watched) return "Mark that this coach came to watch, below.";
+    function why(kind, coach){
+      if(kind==="coming"&&!events.length) return "Needs a game or tournament on the Player tab first.";
+      if(kind==="coming"&&coach&&coach.athleteId&&a.gradYear){
+        // a "coming up" email is only useful once there is a real event
+      }
+      if(kind==="follow"&&!hasSent) return "No email has been sent to this coach yet.";
+      if(kind==="thanks"&&!t.watched) return "Check 'This coach came and watched them play' below first.";
+      if(kind==="thanks"&&t.watched) return "";
+      if(kind==="intro"&&t.log&&t.log.length) return "You already have a draft or sent email with this coach.";
+      if(kind==="intro"&&!t.log&&!t.log.length) return "";
       return "";
     }
     var needsEvent=(S.kind==="coming"||S.kind==="thanks")&&events.length;
     if(S.eventIdx==null||S.eventIdx>=events.length) S.eventIdx=0;
-    var D=S.draft||{};
 
     host.innerHTML = picker()+
       '<div class="row"><div class="grow"><label>Coach</label><select id="tpick">'+
@@ -877,10 +971,11 @@
           'The player may write today, and the email says so honestly.')+'</div>' : "")+
       '<div class="card"><h3>What kind of email</h3>'+
         '<div class="kinds">'+KINDS.map(function(K){
-          var block=why(K.k);
+          var block=why(K.k,t);
           return '<button class="kind" data-k="'+K.k+'" aria-pressed="'+(S.kind===K.k)+'"'+(block?' disabled title="'+esc(block)+'"':'')+'>'+
             '<b>'+esc(K.t)+'</b><span>'+esc(block||K.d)+'</span></button>';
         }).join("")+'</div>'+
+        (why('',t)? '<div class="banner" style="margin-top:8px"><b style="font-weight:600">Why some kinds are greyed out:</b> '+esc(why('',t))+'</div>':'')+
         (needsEvent?'<label style="margin-top:12px">Which game or tournament</label><select id="ev-pick">'+
           events.map(function(e,i){ return '<option value="'+i+'"'+(i===S.eventIdx?' selected':'')+'>'+esc([e.date,e.name].filter(Boolean).join(" \u2013 "))+'</option>'; }).join("")+'</select>':'')+
         '<label style="margin-top:12px"><input type="checkbox" id="watched" '+(t.watched?'checked':'')+' style="width:auto;margin-right:8px">This coach came and watched them play</label>'+
@@ -892,8 +987,11 @@
             'Each [[name | instruction]] is a sentence the assistant writes, following the instruction. The assistant never sees or writes a number.</div>'+
             '<label>Subject</label><input id="tpl-subj" value="'+esc(tpl.subject)+'">'+
             '<label>Body</label><textarea id="tpl-body" rows="16" style="font-family:ui-monospace,Consolas,monospace;font-size:13px">'+esc(tpl.body)+'</textarea>'+
-            '<div class="row" style="margin-top:8px"><button class="btn ghost" id="tpl-save">Save template</button>'+
-            '<button class="btn quiet" id="tpl-reset"'+(tpl.is_default?' disabled':'')+'>Reset to the original</button></div>'
+            '<div class="row" style="margin-top:8px"><button class="btn ghost" id="tpl-preview">Preview result</button>'+
+            '<button class="btn ghost" id="tpl-save">Save template</button>'+
+            '<button class="btn quiet" id="tpl-reset"'+(tpl.is_default?' disabled':'')+'>Reset to the original</button></div>'+
+            (S.tplPreview?'<div class="muted" style="margin-top:8px">'+esc(S.tplPreview)+'</div>':'')+
+            '<div id="tpl-preview-out" style="margin-top:8px;white-space:pre-wrap;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;max-height:300px;overflow:auto"></div>'
             :'<div class="muted">Loading\u2026</div>')+
         '</details>'+
         (S.promptText?'<details open style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:14px">The exact prompt sent to the assistant</summary>'+
@@ -906,7 +1004,11 @@
         '<label>Message</label><textarea id="d-body" class="draftbox" placeholder="Nothing written yet.">'+esc(D.body||"")+'</textarea>'+
         '<div class="row" style="margin-top:10px">'+
           '<button class="btn" id="open">Open in email</button>'+
-          '<button class="btn ghost" id="copy">Copy</button>'+
+          '<button class="btn ghost" id="save">Save</button>'+
+          '<button class="btn ghost" id="history">History</button>'+
+          '<button class="btn ghost" id="copyfull">Copy full</button>'+
+          '<button class="btn ghost" id="gmail">Gmail</button>'+
+          '<button class="btn ghost" id="outlook">Outlook</button>'+
           '<button class="btn ghost" id="sent">Mark as sent</button>'+
         '</div>'+
         '<div class="muted" style="margin-top:8px">It opens in whatever email app the player is signed into, addressed and filled in. They read it, fix anything that does not sound like them, and press send.</div>'+
@@ -919,7 +1021,13 @@
         }).join(" \u00b7 ")+'</div></div>':"");
 
     wirePicker();
-    el("tpick").onchange=function(){ S.tid=el("tpick").value; S.draft={}; S.promptText=""; render(); };
+    el("tpick").onchange=function(){
+      var prevId=S.tid;
+      S.tid=el("tpick").value;
+      if(prevId && S.draft) recordDraft(prevId, S.draft);   // keep what was just written
+      S.draft=currentDraft(S.tid)||null;                    // restore that coach's last draft
+      S.promptText=""; render();
+    };
     Array.prototype.forEach.call(host.querySelectorAll("[data-k]"),function(b){ b.onclick=function(){ S.kind=b.getAttribute("data-k"); S.promptText=""; render(); }; });
     if(el("ev-pick")) el("ev-pick").onchange=function(){ S.eventIdx=+el("ev-pick").value; };
     el("watched").onchange=function(){ t.watched=el("watched").checked; putTarget(t); render(); };
@@ -943,6 +1051,7 @@
           if(!d.ok){ S.draft={notes:[d.message||"Couldn\u2019t write that email."]}; render(); return; }
           S.draft={subject:d.subject, body:d.body, facts:d.facts, notes:d.notes, slots:d.slots, provider:d.provider};
           if(d.prompt) S.promptText=d.prompt;
+          recordDraft(S.tid, S.draft);
           t.log=t.log||[]; t.log.push({kind:S.kind,action:"drafted",date:todayISO(),subject:d.subject});
           putTarget(t); render();
         })
@@ -958,12 +1067,68 @@
       fetch("/api/templates/"+S.kind,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({subject:c.subject,body:c.body})})
         .then(function(r){ return r.json(); }).then(function(d){ S.templates[S.kind]=d; S.tplOpen=true; render(); });
     };
+    // Inline preview: render the edited template with standard sentences (no
+    // model call) so the user sees what the email would look like before saving.
+    if(el("tpl-preview")) el("tpl-preview").onclick=function(){
+      var c=currentTemplate();
+      if(!c){ el("state").textContent="Template not ready."; return; }
+      var ev=needsEvent?events[S.eventIdx]:null;
+      S.busy=true; render();
+      fetch("/api/compose",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({kind:S.kind, athlete:A(), target:t, event:ev, template:c, render_preview:true})}
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          S.busy=false;
+          if(!d.ok || !d.ok){ el("tpl-preview-out").textContent="Couldn’t preview this template."; return; }
+          el("tpl-preview-out").textContent=(d.subject? d.subject+"\n\n":"")+(d.body||"(empty)");
+        })
+        .catch(function(){ S.busy=false; el("tpl-preview-out").textContent="Couldn’t preview this template (only works in the installed app)."); });
+    };
     if(el("tpl-reset")) el("tpl-reset").onclick=function(){
       fetch("/api/templates/"+S.kind,{method:"DELETE"})
         .then(function(r){ return r.json(); }).then(function(d){ S.templates[S.kind]=d; S.tplOpen=true; render(); });
     };
     el("copy").onclick=function(){ if(navigator.clipboard) navigator.clipboard.writeText(el("d-body").value).then(function(){
       el("copy").textContent="Copied"; setTimeout(function(){el("copy").textContent="Copy";},1400); }); };
+    // Save the current draft (subject + body) to the target record's log.
+    el("save").onclick=function(){
+      if(S.draft){
+        t.log=t.log||[];
+        t.log.push({kind:S.kind,action:"drafted",date:todayISO(),subject:S.draft.subject||"(untitled)"});
+        recordDraft(S.tid, S.draft);
+        putTarget(t);
+        el("save").textContent="Saved";
+        setTimeout(function(){el("save").textContent="Save";},1400);
+      }
+    };
+    // Show a small history of the last few drafts for this coach.
+    el("history").onclick=function(){
+      var drafts=loadDrafts();
+      var h=drafts[S.tid]?drafts[S.tid].history:null;
+      if(!h||!h.length){
+        el("state").textContent="No history yet for this coach."; return;
+      }
+      var lines=h.map(function(d){return "["+d.date+"] "+d.kind+": "+(d.subject||"(untitled)").slice(0,40);}).join("\n");
+      el("state").textContent="Last drafts for this coach:\n"+lines;
+    };
+    // Copy subject + body together (Copy only copied the body before).
+    el("copyfull").onclick=function(){
+      var full=(el("d-subj").value? el("d-subj").value+"\n\n":"")+(el("d-body").value||"");
+      if(navigator.clipboard) navigator.clipboard.writeText(full).then(function(){
+        el("copyfull").textContent="Copied"; setTimeout(function(){el("copyfull").textContent="Copy full";},1400); });
+    };
+    // Open in Gmail compose.
+    el("gmail").onclick=function(){
+      var subject=encodeURIComponent(el("d-subj").value||"");
+      var body=encodeURIComponent(el("d-body").value||"");
+      window.open("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(t.coachEmail||"")+"&su="+subject+"&body="+body,"_blank");
+    };
+    // Open in Outlook web compose.
+    el("outlook").onclick=function(){
+      var subject=encodeURIComponent(el("d-subj").value||"");
+      var body=encodeURIComponent(el("d-body").value||"");
+      window.open("https://outlook.live.com/mail/0/0/compose?to="+encodeURIComponent(t.coachEmail||"")+"&subject="+subject+"&body="+body,"_blank");
+    };
     el("open").onclick=function(){
       window.location.href="mailto:"+encodeURIComponent(t.coachEmail||"")+"?subject="+encodeURIComponent(el("d-subj").value)+"&body="+encodeURIComponent(el("d-body").value);
     };
@@ -1048,6 +1213,22 @@
   })();
   (async function(){ try{ S.sample=await claude.use("sample"); render(); }catch(e){} })();
   (async function(){ try{ S.downloads=await claude.use("downloads"); }catch(e){} })();
+
+  // Cmd/Ctrl+S saves the current draft without leaving the page.
+  document.addEventListener("keydown", function(e){
+    if((e.metaKey||e.ctrlKey) && e.key==="s"){
+      e.preventDefault();
+      if(VIEW==="write" && S.draft){
+        recordDraft(S.tid, S.draft);
+        el("state").textContent="Draft saved.";
+        setTimeout(function(){ if(el("state")&&el("state").textContent==="Draft saved.") el("state").textContent=""; },1500);
+      }
+    }
+  });
+  // Save the current draft before the page goes away.
+  window.addEventListener("beforeunload", function(){
+    if(VIEW==="write" && S.draft) recordDraft(S.tid, S.draft);
+  });
 })();
 </script>
 </body>

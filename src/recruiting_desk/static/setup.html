@@ -59,6 +59,15 @@
   </div>
 
   <div class="card">
+    <h3>Backup your data</h3>
+    <div class="lede">Download every piece of your campaign — your players, target schools, coach list, outreach log, contact rules and saved templates — as one JSON file. Keep it somewhere safe, or move it to another computer.</div>
+    <div class="row">
+      <button class="btn" id="export-data">Download full backup</button>
+      <span class="muted" id="exportmsg"></span>
+    </div>
+  </div>
+
+  <div class="card">
     <h3>Stop the app</h3>
     <div class="lede">Recruiting Desk keeps running in the background after you close this tab, so the next visit is instant. This turns it off. Opening it again from the Start menu brings it back with everything saved.</div>
     <button class="ghost" id="quit">Quit Recruiting Desk</button>
@@ -69,6 +78,11 @@
     <h3>GameChanger</h3>
     <div class="lede">No sign-in needed. Recruiting Desk reads a <b>published</b> GameChanger athlete profile directly &mdash; name, class year, positions and every season&rsquo;s stats. Paste the profile link on <a href="/">Start here</a>.</div>
     <div class="muted">If the app says a profile is unpublished, publish it from the GameChanger app first. That is also what lets a coach open the link you send.</div>
+    <div class="row">
+      <label style="margin:0">Connected account</label>
+      <span id="gc-status" class="pill">checking…</span>
+      <button id="gc-disconnect" class="ghost" style="display:none">Disconnect</button>
+    </div>
   </div>
 </div>
 
@@ -98,7 +112,24 @@ function paint(){
 }
 
 function load(){
-  fetch("/api/settings").then(function(r){ return r.json(); }).then(function(d){ S = d; paint(); });
+  fetch("/api/settings").then(function(r){ return r.json(); }).then(function(d){ S = d; paint(); updateGcStatus(); });
+}
+
+// Reflect the GameChanger connection status on the Settings page.
+function updateGcStatus(){
+  var gc = (S && S.gamechanger) || {};
+  var status = el("gc-status");
+  var btn = el("gc-disconnect");
+  if(!status) return;
+  if(gc.connected){
+    status.textContent = "Connected";
+    status.className = "pill live";
+    btn.style.display = "inline-block";
+  } else {
+    status.textContent = "Not connected";
+    status.className = "pill hold";
+    btn.style.display = "none";
+  }
 }
 load();
 
@@ -133,6 +164,35 @@ el("quit").onclick = function(){
   fetch("/api/app/quit", {method:"POST"}).finally(function(){
     el("quitmsg").textContent = " Stopped. You can close this tab.";
   });
+};
+
+el("export-data").onclick = function(){
+  el("exportmsg").textContent = "Preparing backup…";
+  fetch("/api/data/export").then(function(r){
+    if(!r.ok) throw new Error("Export failed");
+    return r.json().then(function(data){ return {data:data}; });
+  }).then(function(x){
+    var blob = new Blob([JSON.stringify(x.data, null, 2)], {type:"application/json"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "recruiting-desk-backup.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    el("exportmsg").textContent = "Backup downloaded.";
+  }).catch(function(e){
+    el("exportmsg").textContent = "Couldn’t make the backup (" + e.message + ").";
+  });
+};
+
+el("gc-disconnect").onclick = function(){
+  fetch("/api/gc/disconnect", {method:"POST"}).then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.ok){ el("gc-status").textContent = "Not connected"; el("gc-status").className = "pill hold"; el("gc-disconnect").style.display="none"; }
+    })
+    .catch(function(){ el("gc-status").textContent = "Error"; });
 };
 
 </script>

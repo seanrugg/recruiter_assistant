@@ -16,6 +16,7 @@ Bound to 127.0.0.1 deliberately. This is not a server for other people.
 
 import os
 import json
+import datetime
 import webbrowser
 import threading
 import pathlib
@@ -104,6 +105,42 @@ def db_delete(collection: str, doc_id: str):
         docs.pop(doc_id, None)
         _write(collection, docs)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- backup
+
+# The files that make up a campaign. Everything a family would want to copy to a
+# new machine, in one download. The token and api_key are dropped: this file is
+# meant to be saved to disk, and a coach who found it would have everything.
+_EXPORT_FILES = (
+    "athletes.json", "programs.json", "outreach.json",
+    "contact_rules.json", "contact_rules_store.json",
+    "templates.json", "settings.json", "config.toml",
+)
+
+
+@app.get("/api/data/export")
+def data_export():
+    """Download the whole campaign as one JSON file. No keys, no token."""
+    out = {"exported_at": datetime.datetime.now().isoformat(timespec="seconds")}
+    for name in _EXPORT_FILES:
+        path = campaign.HOME / name
+        if not path.exists():
+            continue
+        try:
+            text = path.read_text()
+        except OSError:
+            continue
+        try:
+            out[name] = json.loads(text)
+        except json.JSONDecodeError:
+            out[name] = text  # a raw file (config.toml) we don't know how to parse
+    # Never export anything that would let someone read the record or sign in.
+    out.pop("api_key", None)
+    if isinstance(out.get("settings.json"), dict):
+        out["settings.json"].pop("api_key", None)
+    return JSONResponse(content=out, media_type="application/json",
+                        headers={"Content-Disposition": 'attachment; filename="recruiting-desk-backup.json"'})
 
 
 # ---------------------------------------------------------------- assistant
@@ -250,11 +287,16 @@ class ComposeRequest(BaseModel):
     coaches: list[str] | None = None
     template: dict | None = None     # an unsaved edit, to try before saving
     preview: bool = False            # True: return the prompt only, don't call the model
+    render_preview: bool = False     # True: render the template with standard sentences, no model
 
 
 @app.post("/api/compose")
 def compose_email(body: ComposeRequest):
     try:
+        if body.render_preview:
+            return {"ok": True, **compose.compose(
+                body.kind, body.athlete, body.target, body.event, body.coaches, body.template,
+                use_model=False)}
         if body.preview:
             return {"ok": True, "prompt": compose.prompt_preview(
                 body.kind, body.athlete, body.target, body.event, body.coaches, body.template)}
